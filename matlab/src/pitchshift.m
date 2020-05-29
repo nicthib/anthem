@@ -1,0 +1,11 @@
+function out = pitchshift(data,ps)
+F1 = fft(data);
+N = size(F1,1);
+F1a = F1(1:N/2,:);
+F1b = F1(end:-1:N/2+1,:);
+t1 = 1:N/2; 
+t2 = 1 + (t1-1) / (2.^(ps/12));
+F2a = interp1(t1, F1a, t2);
+F2b = interp1(t1, F1b, t2);
+F2 = [F2a;F2b(end:-1:1,:)];
+out = real(ifft(F2)); 
