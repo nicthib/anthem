@@ -1,4 +1,4 @@
-function keysout = makekeys(scale,scaletype,nnotes,addoct)
+function keyso = makekeys(scale,scaletype,nnotes,addoct)
 noteref = csvread('NoteIDX.csv');
 noteIDX = noteref(scaletype,:);
 noteIDX(isnan(noteIDX)) = [];

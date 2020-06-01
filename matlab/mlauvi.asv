@@ -78,9 +78,9 @@ else
 end
 
 function Loadcfg_Callback(hO,~,h)
-[file,path] = uigetfile('.mat','Please choose a cfg file');
+[File,Path] = uigetfile('.mat','Please choose a cfg file');
 close all
-load(fullfile(path,file))
+load(fullfile(Path,File))
 guidata(hO, h);
 
 function Wshow_Callback(hO, ~, h)
@@ -144,15 +144,16 @@ guidata(hO, h);
 function UpdateH_Callback(hO, ~, h)
 st = str2num(h.vs_str.String)/100;
 en = str2num(h.ve_str.String)/100;
-h.m.outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
+outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
 tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
 h.St.String = 'Updating H''...'; drawnow
 h.m.keys = makekeys(h.scale.Value,h.scaletype.Value,numel(find(h.m.W_sf & tmp)),str2num(h.addoct.String));
-[h.Mfinal,h.nd] = H_to_nd(h.H(find(h.m.W_sf & tmp),h.m.outinds),h.m.framerate,h.m.thresh,h.m.keys);
+[h.Mfinal,h.nd] = H_to_nd(h.H(find(h.m.W_sf & tmp),outinds),h.m.framerate,h.m.thresh,h.m.keys);
 h.M.notestart = h.Mfinal(:,5);
 h.M.noteend = h.Mfinal(:,6);
 h.M.notemag = h.Mfinal(:,4);
 h.M.notekey = h.Mfinal(:,3);
+
 guidata(hO, h);
 UpdatePlots(h)
 h.UpdateH.BackgroundColor = [1 1 1];
@@ -178,6 +179,7 @@ function slider_Callback(hO, ~)
 h = guidata(hO);
 st = round(1000*h.slider.Children(1).Position(1)/.625)/1000;
 en = round(1000*(h.slider.Children(2).Position(1)-.1875)/.625)/1000;
+
 h.vs_str.String = mat2str(st*100);
 h.ve_str.String = mat2str(en*100);
 h.UpdateH.BackgroundColor = [1 0 0];
@@ -185,13 +187,16 @@ UpdateH_Callback(hO, [], h)
 guidata(hO,h);
 
 function vs_str_Callback(hO, ~, h)
-h.slider.Children(1).Position(1) = str2num(h.vs_str.String) * .625;
+st = str2num(h.vs_str.String)/100;
+en = str2num(h.ve_str.String)/100;
+outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
+h.slider.Children(1).Position(1) = h.m.vstart * .625;
 h.UpdateH.BackgroundColor = [1 0 0];
 UpdateH_Callback(hO, [], h)
 guidata(hO,h);
 
 function ve_str_Callback(hO, ~, h)
-h.slider.Children(2).Position(1) = str2num(h.vs_str.String) * .625 + .1875;
+h.slider.Children(2).Position(1) = h.m.vend * .625 + .1875;
 h.UpdateH.BackgroundColor = [1 0 0];
 UpdateH_Callback(hO, [], h)
 guidata(hO,h);
@@ -201,8 +206,9 @@ UpdateH_Callback(hO, [], h)
 savepath = strrep(h.mlauvipath,'matlab','outputs');
 if strcmp(h.check_fmt_1.Checked,'on') % Stream
     h.St.String = 'Writing Audio stream...';
+    outinds = round(h.m.vstart*size(h.H,2))+1:round(h.m.vend*size(h.H,2));
     tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
-    out = NeuralStream(h.H(h.m.W_sf & tmp,h.m.outinds),h.m,fullfile(savepath,h.filename.String));
+    out = NeuralStream(h.H(h.m.W_sf & tmp,outinds),h.m,fullfile(savepath,h.filename.String));
     if ~out
         h.St.String = 'ERROR: The number of components and note arrangement you have chosen is too broad. Please try using less components or a tighter note arrangement (e.g. scale)';
         return
@@ -232,11 +238,15 @@ UpdateH_Callback(hO, [], h)
 savepath = strrep(h.mlauvipath,'matlab','outputs');
 h.St.String = 'Writing AVI file...'; drawnow
 sc = 256/h.m.brightness;
-Wtmp = h.W(:,h.m.Wshow); Htmp = h.H(h.m.Wshow,h.m.outinds);
+st = str2num(h.vs_str.String)/100;
+en = str2num(h.ve_str.String)/100;
+outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
+Wtmp = h.W(:,h.m.Wshow); Htmp = h.H(h.m.Wshow,outinds);
 cmaptmp = h.cmap(h.m.Wshow,:);
 vidObj = VideoWriter(fullfile(savepath,[h.filename.String '.avi']));
 vidObj.FrameRate = h.m.framerate; open(vidObj)
-for i = 1:size(Htmp,2)
+j = 0;
+for i = outinds
     im = reshape(Wtmp*diag(Htmp(:,i).*h.m.W_sf(h.m.Wshow)')*cmaptmp,[h.m.ss(1:2) 3]);
     im = uint8(im*sc);
     frame.cdata = im;
@@ -244,9 +254,10 @@ for i = 1:size(Htmp,2)
     writeVideo(vidObj,frame);
     pct_updt = 5;
     if mod(i,pct_updt) == 1
-        h.St.String = ['Writing AVI file... ' mat2str(round(i*100/numel(h.m.outinds))) '% done'];
+        h.St.String = ['Writing AVI file... ' mat2str(round(j*100/numel(outinds))) '% done'];
         drawnow
     end
+    j = j+1;
 end
 h.St.String = 'AVI file written';
 close(vidObj);

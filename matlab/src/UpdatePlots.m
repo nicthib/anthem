@@ -7,14 +7,12 @@ Wim = find(h.m.W_sf & tmp);
 
 axes(h.axesH); cla
 Hstd = std(h.H(:));
-outinds = round(h.m.vstart*size(h.H,2))+1:round(h.m.vend*size(h.H,2));
 t = 1/h.m.framerate:1/h.m.framerate:size(h.H,2)/h.m.framerate;
-l_idx = numel(Wim);
 for i = Wim
     if h.offsetH.Value
-        plot(t(outinds),h.H(i,outinds)+(size(h.H,1)-i+1)*Hstd*H_sep,'Color',h.cmap(i,:))
+        plot(t(h.m.outinds),h.H(i,h.m.outinds)+(size(h.H,1)-i+1)*Hstd*H_sep,'Color',h.cmap(i,:))
     else
-        plot(t(outinds),h.H(i,outinds),'Color',h.cmap(i,:))
+        plot(t(h.m.outinds),h.H(i,h.m.outinds),'Color',h.cmap(i,:))
     end
     hold on
 end
@@ -22,7 +20,7 @@ if ~h.offsetH.Value
     line([0,size(h.H,2)],[h.m.thresh h.m.thresh],'LineStyle','--','Color','k','LineWidth',2)
 end
 colormap(h.cmap); caxis([0 size(h.cmap,1)]);
-xlim([h.m.vstart h.m.vend]*size(h.H,2)/h.m.framerate)
+xlim(t([min(h.m.outinds) max(h.m.outinds)]))
 if h.offsetH.Value
     ylim([-Hstd*H_sep (size(h.H,1)+1)*Hstd*H_sep])
     set(gca,'YTick',[(mod(size(h.H,1),ti)+1:ti:size(h.H,1)-1) size(h.H,1)]*Hstd*H_sep)
@@ -53,7 +51,8 @@ if isfield(h,'Mfinal')
         Mimg(Wim(find(h.M.notekey(j)==h.m.keys)),t) = h.M.notemag(j);
     end
     imagesc(1-repmat(Mimg/max(Mimg(:)),[1 1 3]))
-    xlim([0 h.m.vend-h.m.vstart]*size(h.H,2))
+    xlim([min(h.m.outinds) max(h.m.outinds)])
+    ylim([0.5 size(h.H,1)+.5])
     hold on
     axes(h.axesH)
     xlabel('')

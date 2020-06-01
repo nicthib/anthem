@@ -1,1 +1,1 @@
-/usr/local/bin/ffmpeg
+C:\Users\dnt21\Desktop\ffmpeg-4.2.2-win64-static\bin
