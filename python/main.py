@@ -7,11 +7,13 @@ from tqdm import tqdm
 from soundfile import read
 from midiutil import MIDIFile
 import os, random, sys
+import importlib
 
 def init_audio_engine():
 	print('Intializing...')
 	global p_path
 	p_path = os.path.dirname(os.path.realpath(__file__))
+	p_path = "/".join(p_path.split('/')[:-1]) # Go up one dir
 	global ae
 	ae = {}
 	ae_t = ['S','M','L']

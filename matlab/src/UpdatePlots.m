@@ -21,7 +21,7 @@ end
 if ~h.offsetH.Value
     line([0,size(h.H,2)],[h.m.thresh h.m.thresh],'LineStyle','--','Color','k','LineWidth',2)
 end
-colormap(h.cmap); caxis([0 size(h.cmap,1)]); %colorbar('EastOutside')
+colormap(h.cmap); caxis([0 size(h.cmap,1)]);
 xlim([h.m.vstart h.m.vend]*size(h.H,2)/h.m.framerate)
 if h.offsetH.Value
     ylim([-Hstd*H_sep (size(h.H,1)+1)*Hstd*H_sep])
@@ -39,7 +39,7 @@ else
     ylabel('Amplitude')
     yticks('auto')
     yticklabels('auto')
-    c1 = colorbar;
+    c1 = colorbar('eastoutside');
     ylabel(c1,'Component #')
 end
 set(gca,'XTick',[])
@@ -77,10 +77,10 @@ axis equal
 axis off
 
 axes(h.axesWH); cla
-sc = 256/str2num(h.clim.String);
+sc = 256/h.m.brightness;
 im = reshape(h.W(:,h.m.Wshow)*diag(h.H(h.m.Wshow,h.framenum))*h.cmap(h.m.Wshow,:),[h.m.ss(1:2) 3]);
 imagesc(uint8(im*sc))
-caxis([0 str2num(h.clim.String)])
+caxis([0 h.m.brightness])
 axis equal
 axis off
 

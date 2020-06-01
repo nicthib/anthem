@@ -65,6 +65,7 @@ h.m.vstart = 0;
 h.m.vend = 1;
 h.m.framerate = str2num(h.framerate.String);
 h.m.thresh = str2num(h.thresh.String);
+h.m.brightness = round(max(h.H(:)),2);
 h.filename.String = File(1:end-4);
 h.filenametext.String = File(1:end-4);
 UpdateH_Callback(hO, [], h)
@@ -92,10 +93,6 @@ h.UpdateH.BackgroundColor = [1 0 0];
 UpdateH_Callback(hO, [], h)
 guidata(hO, h);
 
-function clim_Callback(hO, ~, h)
-UpdatePlots(h)
-guidata(hO, h);
-
 function thresh_Callback(hO, ~, h)
 h.m.thresh = str2num(h.thresh.String);
 h.UpdateH.BackgroundColor = [1 0 0];
@@ -115,10 +112,10 @@ function PlayVid_Callback(hO, ~, h)
 while h.PlayVid.Value
     axes(h.axesWH);
     h.frameslider.Enable = 'off';
-    sc = 256/(str2num(h.clim.String));
+    sc = 256/h.m.brightness;
     im = reshape(h.W(:,h.m.Wshow)*diag(h.H(h.m.Wshow,h.framenum).*h.m.W_sf(h.m.Wshow)')*h.cmap(h.m.Wshow,:),[h.m.ss(1:2) 3]);
     imagesc(uint8(sc*im))
-    caxis([0 str2num(h.clim.String)])
+    caxis([0 h.m.brightness])
     axis equal
     axis off
     pause(.01)
@@ -230,7 +227,7 @@ function ExportAVI_Callback(hO, ~, h)
 UpdateH_Callback(hO, [], h)
 h.St.String = 'Writing AVI file...'; drawnow
 fn = h.filename.String; 
-sc = 256/str2num(h.clim.String);
+sc = 256/max(h.H(:));
 Wtmp = h.W(:,h.m.Wshow); Htmp = h.H(h.m.Wshow,:);
 cmaptmp = h.cmap(h.m.Wshow,:);
 vidObj = VideoWriter(fullfile(h.mlauvipath,'output',[fn '.avi']));
@@ -333,9 +330,16 @@ guidata(hO, h);
 
 function offsetH_Callback(hO, ~, h)
 UpdatePlots(h)
+h.axesMIDI.Position(3) = h.axesH.Position(3);
 
 function vscale_Callback(hO, ~, h)
 UpdatePlots(h)
+
+function brightness_Callback(hO, ~, h)
+tmp = inputdlg({'New max brightness:'},'Brightness adjustment',1,{mat2str(h.m.brightness)});
+h.m.brightness = str2num(tmp{1});
+UpdatePlots(h)
+guidata(hO, h);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% UNUSED CALLBACKS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -343,7 +347,6 @@ function doNothing_Callback(hO, ~, h)
 function framerate_CreateFcn(hO, ~, h)
 function Wshow_CreateFcn(hO, ~, h)
 function thresh_CreateFcn(hO, ~, h)
-function clim_CreateFcn(hO, ~, h)
 function frameslider_CreateFcn(hO, ~, h)
 function scale_CreateFcn(hO, ~, h)
 function filename_Callback(hO, ~, h)
@@ -353,3 +356,7 @@ function addoct_CreateFcn(hO, ~, h)
 function ve_str_CreateFcn(hO, ~, h)
 function vs_str_CreateFcn(hO, ~, h)
 function vscale_CreateFcn(hO, ~, h)
+
+
+
+function noteGUI_Callback(hO, ~, h)
