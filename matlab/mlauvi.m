@@ -11,7 +11,7 @@ if nargout; [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:}); else; 
 
 function mlauvi_OpeningFcn(hO, ~, h, varargin)
 warning('off','all')
-% cd to active script location
+% cd to active scriptlocation
 tmp = matlab.desktop.editor.getActive;
 h.mlauvipath = fileparts(tmp.Filename);
 cd(h.mlauvipath);
@@ -20,22 +20,14 @@ addpath(genpath(h.mlauvipath));
 % set ffmpeg path (for combining V/A)
 try
     setenv('PATH', cell2mat(importdata('ffmpegpath.txt')))
-    h.St.String = 'ffmpeg path set. Ready to load a dataset';
+    h.St.String = 'Status: ffmpeg path set. Ready to load a dataset';
 catch
-    h.St.String = 'No ffmpeg path found in ffmpegpath.txt. Please update this file to add audio and video seamlessly.';
+    h.St.String = 'Status: No ffmpeg path found in ffmpegpath.txt. Please update this file to add audio and video seamlessly.';
 end
-slidx = h.uipanel2.OuterPosition(1)+.0085;
-slidy = h.uipanel2.OuterPosition(2)+.051;
-% Set up load pct multi slider
-h.output = hO; h.framenum = 1; set(gcf, 'units','normalized','outerposition',[.2 .2 .85 .75]);
-h.slider = superSlider(hO, 'numSlides', 2,'controlColor',[.94 .94 .94],... 
-'position',[slidx slidy .1 .03],'stepSize',.3,'callback',@slider_Callback);
-h.slider.UserData = [0 1;0 1];
-h.slider.Children(2).Position(1) = .8125;
 guidata(hO, h);
 
 function varargout = mlauvi_OutputFcn(hO, ~, h)
-varargout{1} = h.output;
+varargout{1} = hO;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% MAIN CALLBACKS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -57,23 +49,23 @@ if (ndims(h.W) == 3 && size(h.H,1) == size(h.W,3)) || (ndims(h.W) == 2 && size(h
     n = size(h.H,1);
     h.cmap = jet(n);
     h.m.Wshow = 1:n;
-    h.m.W_sf = ones(1,size(h.W,3));
     h.m.ss = size(h.W);
     h.W = reshape(h.W,[prod(h.m.ss(1:2)) h.m.ss(3)]);
-    h.W_sf.Checked = 'off';
+    h.framenum = 1;
     h.frameslider.Enable = 'on';
     h.vs_str.String = '0';
     h.ve_str.String = '100';
-    h.m.framerate = str2num(h.framerate.String);
+    h.m.fr_in = str2num(h.fr_in.String);
     h.m.thresh = str2num(h.thresh.String);
     h.m.brightness = max(h.H(:));
-    h.filename.String = File(1:end-4);
-    h.filenametext.String = File(1:end-4);
-    UpdateH_Callback(hO, [], h)
+    pts = strsplit(File,'.');
+    h.filename.String = pts{1};
+    h.filenametext.String = pts{1};
+    h = UpdateH(hO,h);
     guidata(hO, h);
 else
     errordlg('Inner dimensions of HxW do not match!')
-    h.St.String = 'Data load failed!';
+    h.St.String = 'Status: Data load failed!';
     drawnow
 end
 
@@ -81,6 +73,8 @@ function Loadcfg_Callback(hO,~,h)
 [file,path] = uigetfile('.mat','Please choose a cfg file');
 close all
 load(fullfile(path,file))
+h.St.String = 'Status: config file successfuly loaded.';
+drawnow
 guidata(hO, h);
 
 function Wshow_Callback(hO, ~, h)
@@ -89,28 +83,25 @@ if strcmp(h.Wshow.String,'all')
 else
     h.m.Wshow = str2num(h.Wshow.String);
 end
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
+h = UpdateH(hO,h);
 guidata(hO, h);
 
-function framerate_Callback(hO, ~, h)
-h.m.framerate = str2num(h.framerate.String);
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
+function fr_in_Callback(hO, ~, h)
+h.m.fr_in = str2num(h.fr_in.String);
+h = UpdateH(hO,h);
 guidata(hO, h);
 
 function thresh_Callback(hO, ~, h)
 h.m.thresh = str2num(h.thresh.String);
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
+h = UpdateH(hO,h);
 guidata(hO, h);
 
 function frameslider_Callback(hO, ~, h)
-h.framenum = round(h.frameslider.Value*size(h.H,2));
+h.framenum = round(h.frameslider.Value*size(h.H_p,2));
 if h.framenum == 0
     h.framenum = 1;
 end
-h.frametxt.String = [mat2str(round(h.framenum*100/h.m.framerate)/100) ' sec'];
+h.frametxt.String = [mat2str(round(h.framenum*100/str2num(h.fr_in.String))/100) ' sec'];
 UpdatePlots(h)
 guidata(hO, h);
 
@@ -119,125 +110,101 @@ while h.PlayVid.Value
     axes(h.axesWH);
     h.frameslider.Enable = 'off';
     sc = 256/h.m.brightness;
-    im = reshape(h.W(:,h.m.Wshow)*diag(h.H(h.m.Wshow,h.framenum).*h.m.W_sf(h.m.Wshow)')*h.cmap(h.m.Wshow,:),[h.m.ss(1:2) 3]);
+    im = reshape(h.W(:,h.m.Wshow)*diag(h.H_p(:,h.framenum))*h.cmap(h.m.Wshow,:),[h.m.ss(1:2) 3]);
     imagesc(uint8(sc*im))
     caxis([0 h.m.brightness])
-    axis equal
-    axis off
-    pause(.01)
-    h.frametxt.String = [mat2str(round(h.framenum*100/h.m.framerate)/100) ' sec'];
+    axis equal; axis off
+    h.frametxt.String = [mat2str(round(h.framenum*100/str2num(h.fr_in.String))/100) ' sec'];
     h.framenum = h.framenum + 1;
-    h.frameslider.Value = h.framenum/size(h.H,2);
-    axes(h.axesWH);
-
-    if ~get(h.PlayVid, 'Value')
-        break;
+    h.frameslider.Value = h.framenum/size(h.H_p,2);
+    if ~h.PlayVid.Value
+        break
     end
-    if h.framenum == size(h.H,2)
+    if h.framenum == size(h.H_p,2)
         h.PlayVid.Value = 0;
         h.frameslider.Value = 0;
     end
+    drawnow
 end
 h.frameslider.Enable = 'on';
 guidata(hO, h);
 
-function UpdateH_Callback(hO, ~, h)
+function h = UpdateH(hO,h)
 st = str2num(h.vs_str.String)/100;
 en = str2num(h.ve_str.String)/100;
 h.m.outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
-tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
-h.St.String = 'Updating H''...'; drawnow
-h.m.keys = makekeys(h.scale.Value,h.scaletype.Value,numel(find(h.m.W_sf & tmp)),str2num(h.addoct.String));
-[h.Mfinal,h.nd] = H_to_nd(h.H(find(h.m.W_sf & tmp),h.m.outinds),h.m.framerate,h.m.thresh,h.m.keys);
-h.M.notestart = h.Mfinal(:,5);
-h.M.noteend = h.Mfinal(:,6);
-h.M.notemag = h.Mfinal(:,4);
-h.M.notekey = h.Mfinal(:,3);
-guidata(hO, h);
-UpdatePlots(h)
-h.UpdateH.BackgroundColor = [1 1 1];
-h.St.String = 'H'' updated.';
-
-function W_sf_Callback(hO, ~, h)
-if strcmp(h.W_sf.Checked,'off')
-    h.m.W_sf = imbinarize(sum(h.W,1)/max(sum(h.W,1)),.1);
-    h.W_sf.Checked = 'on';
-elseif strcmp(h.W_sf.Checked,'on')
-    h.m.W_sf = ones(1,size(h.W,2));
-    h.W_sf.Checked = 'off';
+h.St.String = 'Status: Updating H''...'; drawnow
+h.H_p = h.H(h.m.Wshow,h.m.outinds) + str2num(h.yoffset.String);
+if str2num(h.filterH.String) > 0
+    h.St.String = 'Status: Filtering H...'; drawnow
+    for i = 1:size(h.H_p,1)
+        h.H_p(i,:) = highpass(h.H_p(i,:),str2num(h.filterH.String),str2num(h.fr_in.String));
+        h.St.String = ['Status: Filtering H...' round(num2str(i*100/size(h.H_p,1))) '%']; drawnow
+    end
 end
+h.St.String = 'Status: H updated.';
+h = UpdateHp(hO,h);
 UpdatePlots(h)
-h.UpdateH.BackgroundColor = [1 0 0];
+guidata(hO, h);
+
+function h = UpdateHp(hO,h)
+tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
+h.m.keys = makekeys(h.scale.Value,h.scaletype.Value,numel(find(tmp==1)),str2num(h.addoct.String));
+[h.Mfinal,h.nd] = H_to_nd(h.H_p,str2num(h.fr_in.String),h.m.thresh,h.m.keys);
+h.M.notekey =   h.Mfinal(:,3);
+h.M.notemag =   h.Mfinal(:,4);
+h.M.notestart = h.Mfinal(:,5);
+h.M.noteend =   h.Mfinal(:,6);
+h.St.String = 'Status: H'' updated.';
 guidata(hO, h);
 
 function editcmap_Callback(hO, ~, h)
-editcmap(hO,h); 
-guidata(hO,h);
-
-function slider_Callback(hO, ~)
-h = guidata(hO);
-st = round(1000*h.slider.Children(1).Position(1)/.625)/1000;
-en = round(1000*(h.slider.Children(2).Position(1)-.1875)/.625)/1000;
-h.vs_str.String = mat2str(st*100);
-h.ve_str.String = mat2str(en*100);
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
-guidata(hO,h);
-
-function vs_str_Callback(hO, ~, h)
-h.slider.Children(1).Position(1) = str2num(h.vs_str.String) * .625;
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
-guidata(hO,h);
-
-function ve_str_Callback(hO, ~, h)
-h.slider.Children(2).Position(1) = str2num(h.vs_str.String) * .625 + .1875;
-h.UpdateH.BackgroundColor = [1 0 0];
-UpdateH_Callback(hO, [], h)
+editcmap(hO,h);
+UpdatePlots(h)
 guidata(hO,h);
 
 function ExportAudio_Callback(hO, ~, h)
-UpdateH_Callback(hO, [], h)
+h = UpdateHp(hO,h);
 savepath = strrep(h.mlauvipath,'matlab','outputs');
-if strcmp(h.check_fmt_1.Checked,'on') % Stream
-    h.St.String = 'Writing Audio stream...';
-    tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
-    out = NeuralStream(h.H(h.m.W_sf & tmp,h.m.outinds),h.m,fullfile(savepath,h.filename.String));
+if h.audio_fmt.Value == 1 % Stream
+    h.St.String = 'Status: Writing Audio stream...'; drawnow
+    out = NeuralStream(h.H_p,h.m,fullfile(savepath,h.filename.String));
     if ~out
-        h.St.String = 'ERROR: The number of components and note arrangement you have chosen is too broad. Please try using less components or a tighter note arrangement (e.g. scale)';
+        h.St.String = 'Status: ERROR: The number of components and note arrangement you have chosen is too broad. Please try using less components or a tighter note arrangement (e.g. scale)';
         return
     end
-    h.St.String = ['Audio stream ' h.filename.String ' written to ' savepath];
+    h.St.String = ['Audio stream ' h.filename.String ' written to ' savepath]; drawnow
     
-elseif strcmp(h.check_fmt_2.Checked,'on')
-    h.St.String = 'Writing Dynamic Audio file...';
+elseif h.audio_fmt.Value == 2
+    h.St.String = 'Status: Writing Dynamic Audio file...'; drawnow
     if ~isempty(h.nd)
-        nd_to_wav(fullfile(h.mlauvipath,'output',h.filename.String),h.nd,h);
+        nd_to_wav(fullfile(strrep(h.mlauvipath,'matlab','outputs'),h.filename.String),h.nd,h);
     end
-    h.St.String = 'Dynamic Audio file written.'; drawnow
+    h.St.String = 'Status: Dynamic Audio file written.'; drawnow
     
-elseif strcmp(h.check_fmt_3.Checked,'on')
-    h.St.String = 'Writing MIDI...';
+elseif h.audio_fmt.Value == 3
+    h.St.String = 'Status: Writing MIDI...'; drawnow
     midiout = matrix2midi_nic(h.Mfinal,300,[4,2,24,8],0);
-    writemidi(midiout, fullfile(h.mlauvipath,'output',h.filename.String));
-    h.St.String = 'MIDI file written'; drawnow
+    writemidi(midiout, fullfile(strrep(h.mlauvipath,'matlab','outputs'),h.filename.String));
+    h.St.String = 'Status: MIDI file written'; drawnow
     h.combineAV.Enable = 'on';
+    
 else
-    h.St.String = 'Please select an audio format in the edit menu drop down';
+    h.St.String = 'Status: Please select an audio format in the edit menu drop down'; drawnow
 end
 guidata(hO,h)
 
 function ExportAVI_Callback(hO, ~, h)
-UpdateH_Callback(hO, [], h)
+h = UpdateH(hO,h);
 savepath = strrep(h.mlauvipath,'matlab','outputs');
-h.St.String = 'Writing AVI file...'; drawnow
+h.St.String = 'Status: Writing AVI file...'; drawnow
 sc = 256/h.m.brightness;
-Wtmp = h.W(:,h.m.Wshow); Htmp = h.H(h.m.Wshow,h.m.outinds);
+Wtmp = h.W(:,h.m.Wshow); Htmp = h.H_p;
 cmaptmp = h.cmap(h.m.Wshow,:);
 vidObj = VideoWriter(fullfile(savepath,[h.filename.String '.avi']));
-vidObj.FrameRate = h.m.framerate; open(vidObj)
+vidObj.FrameRate = str2num(h.fr_in.String); open(vidObj)
 for i = 1:size(Htmp,2)
-    im = reshape(Wtmp*diag(Htmp(:,i).*h.m.W_sf(h.m.Wshow)')*cmaptmp,[h.m.ss(1:2) 3]);
+    im = reshape(Wtmp*diag(Htmp(:,i))*cmaptmp,[h.m.ss(1:2) 3]);
     im = uint8(im*sc);
     frame.cdata = im;
     frame.colormap = [];
@@ -248,16 +215,16 @@ for i = 1:size(Htmp,2)
         drawnow
     end
 end
-h.St.String = 'AVI file written';
+h.St.String = 'Status: AVI file written';
 close(vidObj);
 
 function combineAV_Callback(hO, ~, h)
 fn = fullfile(strrep(h.mlauvipath,'matlab','outputs'),h.filename.String); 
 system(['ffmpeg -loglevel panic -i ' fn '.avi -i ' fn '.wav -codec copy -shortest ' fn '_audio.avi -y']);
 if exist([fn '_audio.avi'])
-    h.St.String = 'AVI w/ audio successfully written.';
+    h.St.String = 'Status: AVI w/ audio successfully written.';
 else
-    h.St.String = 'AVI w/ audio was unable to be written. Check to make sure you have the proper path to ffmpeg.exe in the ffmpegpath.txt file.';
+    h.St.String = 'Status: AVI w/ audio was unable to be written. Check to make sure you have the proper path to ffmpeg.exe in the ffmpegpath.txt file.';
 end
 
 function Savecfg_Callback(hO, ~, h)
@@ -277,6 +244,16 @@ if strcmp(targ.Enable,'on')
 else
     targ.Enable = 'on';
 end
+
+function vs_str_Callback(hO, ~, h)
+h.framenum = 1;
+h = UpdateH(hO,h);
+guidata(hO,h);
+
+function ve_str_Callback(hO, ~, h)
+h.framenum = 1;
+h = UpdateH(hO,h);
+guidata(hO,h);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% DROP DOWN CALLBACKS %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -300,7 +277,7 @@ guidata(hO,h)
 
 function PlayNotes_Callback(hO,~,h)
 if isfield(h.m,'keys')
-    h.St.String = 'Playing keys...'; drawnow
+    h.St.String = 'Status: Playing keys...'; drawnow
     for i = 1:numel(h.m.keys)
         tic
         if strcmp(h.check_fmt_1.Checked,'on') % Stream
@@ -317,12 +294,13 @@ if isfield(h.m,'keys')
         pause(.5-toc)
         sound(y,44100)
     end
-    h.St.String = 'Done playing keys.';
+    h.St.String = 'Status: Done playing keys.';
 else
 end
 guidata(hO,h)
 
 function addoct_Callback(hO, ~, h)
+h = UpdateH(hO,h);
 guidata(hO, h);
 
 function scaletype_Callback(hO, ~, h)
@@ -332,10 +310,17 @@ function scale_Callback(hO, ~, h)
 guidata(hO, h);
 
 function offsetH_Callback(hO, ~, h)
-UpdatePlots(h)
+h.vscale = vF(h.vscale);
+h.text28 = vF(h.text28);
 h.axesMIDI.Position(3) = h.axesH.Position(3);
+UpdatePlots(h)
+guidata(hO, h);
 
 function vscale_Callback(hO, ~, h)
+UpdatePlots(h)
+
+function yoffset_Callback(hO, ~, h)
+h = UpdateH(hO,h);
 UpdatePlots(h)
 
 function brightness_Callback(hO, ~, h)
@@ -344,10 +329,18 @@ h.m.brightness = str2num(tmp{1});
 UpdatePlots(h)
 guidata(hO, h);
 
+function audio_fmt_Callback(hO, ~, h)
+UpdatePlots(h)
+guidata(hO, h);
+
+function filterH_Callback(hO, ~, h)
+h = UpdateH(hO,h);
+guidata(hO, h);
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% UNUSED CALLBACKS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function doNothing_Callback(hO, ~, h)
-function framerate_CreateFcn(hO, ~, h)
+function fr_in_CreateFcn(hO, ~, h)
 function Wshow_CreateFcn(hO, ~, h)
 function thresh_CreateFcn(hO, ~, h)
 function frameslider_CreateFcn(hO, ~, h)
@@ -359,7 +352,7 @@ function addoct_CreateFcn(hO, ~, h)
 function ve_str_CreateFcn(hO, ~, h)
 function vs_str_CreateFcn(hO, ~, h)
 function vscale_CreateFcn(hO, ~, h)
-
-
-
 function noteGUI_Callback(hO, ~, h)
+function yoffset_CreateFcn(hO, ~, h)
+function audio_fmt_CreateFcn(hO, ~, h)
+function filterH_CreateFcn(hO, ~, h)
