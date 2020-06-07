@@ -24,6 +24,9 @@ try
 catch
     h.St.String = 'Status: No ffmpeg path found in ffmpegpath.txt. Please update this file to add audio and video seamlessly.';
 end
+% Make gui 90% of screen size
+hO.Units = 'normalized';
+hO.Position = [.05 .05 .75 .65];
 guidata(hO, h);
 
 function varargout = mlauvi_OutputFcn(hO, ~, h)
@@ -129,42 +132,12 @@ end
 h.frameslider.Enable = 'on';
 guidata(hO, h);
 
-function h = UpdateH(hO,h)
-st = str2num(h.vs_str.String)/100;
-en = str2num(h.ve_str.String)/100;
-h.m.outinds = round(st*size(h.H,2))+1:round(en*size(h.H,2));
-h.St.String = 'Status: Updating H''...'; drawnow
-h.H_p = h.H(h.m.Wshow,h.m.outinds) + str2num(h.yoffset.String);
-if str2num(h.filterH.String) > 0
-    h.St.String = 'Status: Filtering H...'; drawnow
-    for i = 1:size(h.H_p,1)
-        h.H_p(i,:) = highpass(h.H_p(i,:),str2num(h.filterH.String),str2num(h.fr_in.String));
-        h.St.String = ['Status: Filtering H...' round(num2str(i*100/size(h.H_p,1))) '%']; drawnow
-    end
-end
-h.St.String = 'Status: H updated.';
-h = UpdateHp(hO,h);
-UpdatePlots(h)
-guidata(hO, h);
-
-function h = UpdateHp(hO,h)
-tmp = zeros(1,size(h.H,1)); tmp(h.m.Wshow) = 1;
-h.m.keys = makekeys(h.scale.Value,h.scaletype.Value,numel(find(tmp==1)),str2num(h.addoct.String));
-[h.Mfinal,h.nd] = H_to_nd(h.H_p,str2num(h.fr_in.String),h.m.thresh,h.m.keys);
-h.M.notekey =   h.Mfinal(:,3);
-h.M.notemag =   h.Mfinal(:,4);
-h.M.notestart = h.Mfinal(:,5);
-h.M.noteend =   h.Mfinal(:,6);
-h.St.String = 'Status: H'' updated.';
-guidata(hO, h);
-
 function editcmap_Callback(hO, ~, h)
 editcmap(hO,h);
-UpdatePlots(h)
 guidata(hO,h);
 
 function ExportAudio_Callback(hO, ~, h)
-h = UpdateHp(hO,h);
+h = UpdateH(hO,h);
 savepath = strrep(h.mlauvipath,'matlab','outputs');
 if h.audio_fmt.Value == 1 % Stream
     h.St.String = 'Status: Writing Audio stream...'; drawnow
@@ -339,7 +312,6 @@ guidata(hO, h);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% UNUSED CALLBACKS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function doNothing_Callback(hO, ~, h)
 function fr_in_CreateFcn(hO, ~, h)
 function Wshow_CreateFcn(hO, ~, h)
 function thresh_CreateFcn(hO, ~, h)
