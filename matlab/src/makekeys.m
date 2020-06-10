@@ -10,4 +10,4 @@ for i = 1:numoct
 end
 keysout = keysout(1:nnotes);
 keysout = keysout+addoct*12;
-
+keysout = keysout - 1; % Matlab doesn't index starting at 0. This fixes that issue

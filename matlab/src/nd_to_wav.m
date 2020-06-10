@@ -1,28 +1,29 @@
-function nd_to_wav(filename,nd,h)
+function nd_to_wav(h)
 % nd should contain an array with columns in this order:
 % ns (note start), ne (note end), k (note value), v (velocity)
 
 % Initialize audio track
 fs = 44100;
-wav = zeros(max([round(fs*max(nd(:,2)+11)),10*fs]),2);
+ext_wav = 11; % pad wav file
+wav = zeros(max([round(fs*max(h.nd(:,2)+ext_wav)),10*fs]),2);
 oggpath = strrep(h.mlauvipath,'matlab','AE');
 au = {};
 r = .5;
 
 % Sort nd array by note value. We do this to avoid having to load in wav
 % files repeatedly.
-nd = sortrows(nd,3);
+h.nd = sortrows(h.nd,3);
 
 % currnote also avoids unneccesarily loading notes
 currnote = -1;
-for i = 1:size(nd,1)
-    note = nd(i,3);
-    l = nd(i,2) - nd(i,1);
+for i = 1:size(h.nd,1)
+    note = h.nd(i,3);
+    l = h.nd(i,2) - h.nd(i,1);
     if l <= .25; lidx = 1;
     elseif l < 1; lidx = 2;
     else; lidx = 3;
     end
-    mag = ceil(nd(i,4)/16);
+    mag = ceil(h.nd(i,4)/16);
     % Load .ogg files if needed
     if note ~= currnote
         for j = 1:3
@@ -41,13 +42,15 @@ for i = 1:size(nd,1)
     end
     
     % add note to master file
-    wavidx = round(nd(i,1)*fs)+1:round(nd(i,1)*fs)+size(tmpnote,1);
+    wavidx = round(h.nd(i,1)*fs)+1:round(h.nd(i,1)*fs)+size(tmpnote,1);
     wav(wavidx,:) = wav(wavidx,:) + tmpnote;
-    currnote = nd(i,3);
+    currnote = h.nd(i,3);
     if mod(i,10)
-        h.St.String = ['Writing DynAud file... ' mat2str(round(i*100/size(nd,1))) ' % done'];
+        h.St.String = ['Writing DynAud file... ' mat2str(round(i*100/size(h.nd,1))) ' % done'];
     end
     drawnow
 end
-
+% Crop wav file to ext-1
+wav = wav(1:end-44100*(ext_wav-1),:);
+filename = fullfile(h.savepath.String,h.filenameout.String);
 audiowrite([filename '.wav'],wav,fs);

@@ -2,7 +2,7 @@ function out = editcmap(hO,h)
 uf = uifigure;
 uf.Position(3:4) = [822 360];
 c = zeros(size(h.cmap,1),1);
-c(h.m.Wshow) = 1;
+c(h.Wshow.Value) = 1;
 uit = uitable(uf,'CellEditCallback',@updatePlot);
 uit.ColumnName = {'Red','Green','Blue','Visible'};
 uit.Data = [h.cmap c];
@@ -36,11 +36,11 @@ ax.Position(1) = 415;
 updatePlot
 
 function updatePlot(src,eventdata)
-    h.m.Wshow = find(uit.Data(:,4));
-    imagesc(reshape(h.W(:,h.m.Wshow)*uit.Data(h.m.Wshow,1:3),[h.m.ss(1:2) 3]),'Parent',ax)
+    h.Wshow.Value = find(uit.Data(:,4));
+    imagesc(reshape(h.W(:,h.Wshow.Value)*uit.Data(h.Wshow.Value,1:3),[h.ss(1:2) 3]),'Parent',ax)
     pbaspect(ax,[1 1 1])
-    ax.XLim = [0 h.m.ss(1)];
-    ax.YLim = [0 h.m.ss(1)];
+    ax.XLim = [0 h.ss(1)];
+    ax.YLim = [0 h.ss(1)];
     ax.XTick = [];
     ax.YTick = [];
     drawnow
@@ -70,9 +70,13 @@ end
 
 function exitGUI(uit,hO,h)
     h.cmap = uit.Data(:,1:3);
-    h.m.Wshow = find(uit.Data(:,4));
-    h = UpdateH(hO,h);
+    h.Wshow.Value = find(uit.Data(:,4));
+    h.Wshow.String = mat2col(h.Wshow.Value);
+    h = UpdateH(h);
     guidata(hO,h);
-    close(uf)
+    try
+        close(uf)
+    catch
+    end
 end
 end
