@@ -52,5 +52,6 @@ for i = 1:size(h.nd,1)
 end
 % Crop wav file to ext-1
 wav = wav(1:end-44100*(ext_wav-1),:);
+output = rev(wav(1:441000,1),1,1)
 filename = fullfile(h.savepath.String,h.filenameout.String);
 audiowrite([filename '.wav'],wav,fs);

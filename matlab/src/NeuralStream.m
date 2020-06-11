@@ -3,7 +3,7 @@ filename = fullfile(h.savepath.String,h.filenameout.String);
 C0 = 16.35;
 freqs = C0*2.^((0:127)/12);
 h.H(h.H<0) = 0;
-movielength = size(h.H,2)/h.fr_out.Value;
+movielength = size(h.H,2)/h.fr_in.Value;
 fs = 44100;  % sampling frequency
 t1 = linspace(0,movielength,size(h.H,2));
 t2 = 0:1/fs:movielength;
@@ -14,7 +14,7 @@ else
     out = 1;
 end
 for i = 1:size(h.H,1)
-    a(i,:) = sin(2*pi*freqs(h.keys(i))*t2);
+    a(i,:) = sin(2*pi*freqs(h.keys(i)+1)*t2); % +1 for 0 indexing
     Hrs(i,:) = interp1(t1,h.H(i,:),t2);
 end
 song = sum(a.*Hrs,1);
