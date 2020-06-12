@@ -1,5 +1,8 @@
-
+from main import *
+global w
 w = Tk()
+H = []
+W = []
 
 # Labels
 Label(text='').grid(row=0,column=0)
@@ -45,6 +48,7 @@ ax1.set_title('Output(H x W)')
 ax2.set_title('Spatial Components (W)')
 ax1.axis('off')
 ax2.axis('off')
+
 chart_type = FigureCanvasTkAgg(figure, w)
 chart_type.get_tk_widget().grid(row=9,column=1,rowspan=100,columnspan=6)
 plt.tight_layout()
@@ -87,12 +91,43 @@ audio_fmt = OptionMenu(w,var,*fmt_opts).grid(row=5, column=6, sticky='W')
 def donothing():
 	pass
 
+def updateplots():
+	print('trying...')
+	plt.sca(ax3)
+	plt.plot(H.flatten(1))
 
-	
+def loadfrommat(w):
+	vp = Toplevel(w)
+	#vp = Tk()
+	file = fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+	if not file:
+		vp.destroy()
+		return None, None, None
+	vs = whosmat(file)
+	vname,vsize = [v[0] for v in vs],[v[1] for v in vs]
+
+	# Layout dropdowns and quit button
+	Label(vp,text='Temporal variable').grid(row=0,column=0, padx=20)
+	Label(vp,text='Spatial variable').grid(row=0,column=1, padx=20)
+	varH = StringVar(vp)
+	varH.set(vname[0])
+	varW = StringVar(vp)
+	varW.set(vname[0])
+	OptionMenu(vp,varH,*vname).grid(row=1, column=0)
+	OptionMenu(vp,varW,*vname).grid(row=1, column=1)
+	Button(vp,text='Done',command=vp.destroy,width=10).grid(row=2,column=0,columnspan=3)
+	vp.mainloop()
+	dh = loadmat(file)
+	global H, W
+	H, W = dh[varH.get()], dh[varW.get()]
+	updateplots()
+
+loadarg = partial(loadfrommat, w)
+
 # Menu bar
 menubar = Menu(w)
 filemenu = Menu(menubar, tearoff=0)
-filemenu.add_command(label="Load from .mat", command=loadfrommat)
+filemenu.add_command(label="Load from .mat", command=loadarg)
 filemenu.add_command(label="Load from config", command=donothing)
 filemenu.add_command(label="Quit", command=w.quit)
 
