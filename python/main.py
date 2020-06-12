@@ -1,5 +1,5 @@
 from pathlib import Path
-from scipy.io import loadmat as loadmat
+from scipy.io import loadmat, whosmat
 from scipy.io.wavfile import write
 from scipy import signal
 import numpy as np
@@ -8,7 +8,12 @@ from soundfile import read
 from midiutil import MIDIFile
 import os, random, sys
 import importlib
-
+from tkinter import *
+import  tkinter.ttk as ttk
+from tkinter import filedialog as fd 
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 def init_audio_engine():
 	print('Intializing...')
 	global p_path
@@ -186,4 +191,25 @@ def synth(ae,opts):
 		track[:len(raw)] = track[:len(raw)] + raw
 	return track
 
+def loadfrommat():
+	vp = Tk()
+	file = fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+	if not file:
+		vp.destroy()
+		return None, None, None
+	vs = whosmat(file)
+	vname,vsize = [v[0] for v in vs],[v[1] for v in vs]
 
+	# Layout dropdowns and quit button
+	Label(text='Temporal variable').grid(row=0,column=0, padx=20)
+	Label(text='Spatial variable').grid(row=0,column=1, padx=20)
+	varH = StringVar(vp)
+	varH.set(vname[0])
+	varW = StringVar(vp)
+	varW.set(vname[0])
+	OptionMenu(vp,varH,*vname).grid(row=1, column=0)
+	OptionMenu(vp,varW,*vname).grid(row=1, column=1)
+	Button(text='Quit',command=vp.destroy,width=10).grid(row=2,column=0,columnspan=3)
+	vp.mainloop()
+	dh = loadmat(file)
+	return dh[varH.get()], dh[varW.get()], file

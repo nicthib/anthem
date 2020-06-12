@@ -1,10 +1,4 @@
-from tkinter import *
-import  tkinter.ttk as ttk
-from tkinter import filedialog as fd 
-from scipy.io import loadmat, whosmat
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 w = Tk()
 
 # Labels
@@ -93,13 +87,8 @@ audio_fmt = OptionMenu(w,var,*fmt_opts).grid(row=5, column=6, sticky='W')
 def donothing():
 	pass
 
-def loadfrommat():
-	file = fd.askopenfilename()
-	vars = whosmat(file)
-	
-	
-	return file
 
+	
 # Menu bar
 menubar = Menu(w)
 filemenu = Menu(menubar, tearoff=0)
