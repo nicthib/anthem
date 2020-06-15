@@ -3,10 +3,11 @@ from scipy.io import loadmat, whosmat
 from scipy.io.wavfile import write
 from scipy import signal
 import numpy as np
+from numpy.matlib import repmat
 from tqdm import tqdm
 from soundfile import read
 from midiutil import MIDIFile
-import os, random, sys
+import os, random, sys, cv2
 import importlib
 from tkinter import *
 import  tkinter.ttk as ttk
@@ -15,35 +16,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from functools import partial
 from matplotlib import cm
-
-def init_audio_engine():
-	print('Intializing...')
-	global p_path
-	
-	p_path = "/".join(p_path.split('/')[:-1]) # Go up one dir
-	global ae
-	ae = {}
-	ae_t = ['S','M','L']
-	for i in range(3):
-		ae[ae_t[i]] = read(os.path.join(p_path,'audio', 'ae_' +  ae_t[i] + '.ogg'))
-	print('Done!')
-
-def init_cfg():
-	cfg = {}
-	cfg['scaletype'] = 'scale'
-	cfg['minor'] = 0
-	cfg['augment'] = 0
-	cfg['key'] = 'C'
-	cfg['framerate'] = 10
-	cfg['start'] = 0
-	cfg['stop'] = .1
-	cfg['threshold'] = .01
-	cfg['octave'] = 1
-	cfg['pathin'] = 'inputs'
-	cfg['pathout'] = 'outputs'
-	cfg['fileout'] = 'out'
-	cfg['filein'] = 'demo1.mat'
-	return cfg
 
 def makekeys(key,scaletype,addoct,nnotes):
 	# noteref = csvread('NoteIDX.csv') FIX
@@ -57,11 +29,8 @@ def makekeys(key,scaletype,addoct,nnotes):
 	keysout = keysout+addoct*12;
 
 def jet(dz):
-	tmp = cm.jet(plt.Normalize(0,dz-1)(range(dz)))
-	return tmp[:,:-1]
-
-def donothing():
-	pass
+    tmp = cm.jet(np.linspace(0,1,dz))
+    return tmp
 
 def init_entry(fn):
 	if isinstance(fn, str):
@@ -70,33 +39,6 @@ def init_entry(fn):
 		entry = DoubleVar()
 	entry.set(fn)
 	return entry
-
-def H_to_Hp(H,fr,threshold):
-	keysfull = range(20)
-	ns = int(1000*len(H.T)/fr)
-	H = signal.resample(H, ns, axis=1)
-	Hb = H > threshold
-	Hb = Hb * 1
-	Hb[:,0] = 0
-	Hb[:,-1] = 0
-	Hmax = np.max(H)
-	Hp = np.zeros(np.shape(H))
-	nd = {}
-	nd['st'],nd['en'],nd['note'],nd['mag'] = [],[],[],[]
-	for i in range(len(H)):
-		TC = np.diff(Hb[i,:])
-		st = np.argwhere(TC == 1)
-		en = np.argwhere(TC == -1)
-		nd['st'].extend([x/1000 for x in st])
-		nd['en'].extend([x/1000 for x in en])
-		for j in range(len(st)):
-			tmpmag = np.max(H[i,st[j][0]:en[j][0]])
-			Hp[i,st[j][0]:en[j][0]] = tmpmag
-			nd['mag'].append(int(tmpmag * 127 / Hmax))
-			nd['note'].append(keysfull[i])
-		# Add this data to the nd file
-		
-	return Hp,nd
 
 #def htoMIDI(cfg):
 # 	dset = loadmat(os.path.join(p_path,cfg['pathin'], cfg['filein']))

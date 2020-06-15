@@ -5,11 +5,16 @@ class App_Window(Tk):
 	def __init__(self,parent):
 		Tk.__init__(self,parent)
 		self.parent = parent
+		self.rootpath = os.sep.join(os.path.realpath(__file__).split(os.sep)[:-2])
+		#self.configure(background='white')
 		self.init()
+	
+	def donothing(self):
+		pass
 
 	def loadfrommat(self):
 		vp = Toplevel(self)
-		self.inputfile = fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+		self.inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
 		if not self.inputfile:
 			vp.destroy()
 			return None, None, None
@@ -32,56 +37,64 @@ class App_Window(Tk):
 		self.H, self.W = dh[varH.get()], dh[varW.get()]
 		self.ss = self.W.shape
 		self.W = self.W.reshape(self.W.shape[0]*self.W.shape[1],self.W.shape[2])
-		self.framenum = 1
+		self.Wshow = list(range(len(self.H)))
 		self.brightness.set(f'{float(f"{np.max(self.H):.3g}"):g}')
-		self.filein.set(os.path.split(self.inputfile)[1])
-		self.fileout.set(os.path.split(self.inputfile)[1])
-		self.savepath.set(os.path.split(self.inputfile)[0].replace('input','output'))
+		self.filein.set(os.path.splitext(os.path.split(self.inputfile)[1])[0])
+		self.fileout.set(self.filein.get())
+		self.savepath.set(os.path.join(self.rootpath,'outputs'))
 		self.init_plots()
-		self.refreshH()
-		self.refreshW()
+		self.refreshplots()
 
-	def refreshH(self):
+	def refreshplots(self):
 		# H_pp is pre-processed
 		# H_fp is fully processed
-		self.H_pp = self.H[:,int(len(self.H.T)*self.st_p.get()/100):int(len(self.H.T)*self.en_p.get()/100)] + self.baseline.get()
+		self.H_pp = self.H[self.Wshow,int(len(self.H.T)*self.st_p.get()/100):int(len(self.H.T)*self.en_p.get()/100)] + self.baseline.get()
 		if self.audio_fmt.get() != 'Stream':
 			self.H_to_Hp()
 		else:
 			self.H_fp = self.H_pp
 
 		self.init_plots()
-		
-		self.H_plot = self.Hax1.plot(self.H_pp.T,linewidth=.5)
-		self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none')
+		if self.frameslider.get() > len(self.H_pp.T):
+			self.frameslider.set(1)
+		self.cmap = jet(len(self.H_fp))
+		Hstd = self.H_pp.std()*3
+		if self.offsetH.get():
+			tmpH = self.H_pp.T + repmat([w*Hstd for w in self.Wshow],len(self.H_pp.T),1)
+		else:
+			tmpH = self.H_pp.T
+
+		self.H_plot = self.Hax1.plot(tmpH,linewidth=.5)
+		for i,j in enumerate(self.Hax1.lines):
+			j.set_color(self.cmap[i])
+		self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none',cmap=plt.get_cmap('gray'))
 		self.H_p_plot.axes.set_aspect('auto')
 
 		ax = self.canvas_H.figure.axes[0]
 		ax.set_xlim(0, len(self.H_pp.T))
-		ax.set_ylim(np.min(self.H_pp), np.max(self.H_pp)) 
+		ax.set_ylim(np.min(tmpH), np.max(tmpH)) 
 		ax.spines['top'].set_visible(False)
 		ax.spines['right'].set_visible(False)
 		ax.spines['left'].set_visible(False)
 		
 		self.canvas_H.draw()
 
-	def refreshW(self):
-		self.cmap = jet(len(self.H))
 		self.sc = 255/self.brightness.get()
-		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.framenum])@self.cmap*self.sc).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
 		self.imWH.axes.set_aspect('equal')
-		self.imW = self.Wax2.imshow((self.W@self.cmap*255/np.max(self.W)).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imW = self.Wax2.imshow((self.W@self.cmap[:,:-1]*255/np.max(self.W)).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
 		self.imW.axes.set_aspect('equal')
 		self.canvas_W.draw()
 
 		# Update slider max min
 		self.frameslider['to'] = int(len(self.H_pp.T)-1)
 		self.frameslider['command'] = self.refreshW_slider
+
 		plt.tight_layout()
 
 	def refreshW_slider(self,event):
 		self.imWH.remove()
-		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap*self.sc).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
 		self.canvas_W.draw()
 
 	def H_to_Hp(self):
@@ -119,7 +132,7 @@ class App_Window(Tk):
 			with open(file_name, 'wb') as output_file:
 				MIDI.writeFile(os.path.combine(self.savepath.get(),self.fileout.get()))
 		elif self.audio_fmt.get() == 'Dynamic':
-			wav = self.synth()
+			self.synth()
 		elif self.audio_fmt.get() == 'Stream':
 			pass
 			# neural stream here!
@@ -129,7 +142,6 @@ class App_Window(Tk):
 		r = .5 # release for note
 		r_mat = np.linspace(1, 0, num=int(fs*r))
 		r_mat = np.vstack((r_mat,r_mat)).T
-		p_path = self.savepath.get().replace('outputs','AE')
 		currnote = -1
 		ext = 11
 		note = [[0] * 8 for i in range(3)]
@@ -140,10 +152,10 @@ class App_Window(Tk):
 				for mag in range(8): # Load up new notes
 					for length in range(3):
 						fn = str(currnote+1)+'_'+str(mag)+'_'+str(length+1)+'.ogg';
-						note[length][mag],notused = read(os.path.join(p_path,fn))
+						note[length][mag],notused = read(os.path.join(self.rootpath,'AE',fn))
 			L = self.nd['en'][i]-self.nd['st'][i]
 			if L > 9.5-r:
-				L = 9.5 - r
+				L = 9.5-r
 			if L > 1:
 				raw = note[2][int(np.ceil(self.nd['mag'][i]/16-1))][0:int((L+r)*fs)] # Truncate to note length plus release
 			elif 1 > L > .25:
@@ -154,7 +166,17 @@ class App_Window(Tk):
 			inds = range(int(self.nd['st'][i][0]*fs),int(self.nd['st'][i][0]*fs)+len(raw))
 			raws[inds,:] += raw
 		raws = raws[:-fs*(ext-1),:] # Crop wav
-		write(os.path.join(self.savepath.get(),os.path.splitext(self.fileout.get())[0]+'.wav'),fs,raws)
+		filehead = os.path.splitext(self.fileout.get())[0]
+		write(os.path.join(self.savepath.get(),filehead)+'.wav',fs,raws)
+
+	def exportavi(self):
+		fourcc = cv2.VideoWriter_fourcc(*'XVID')
+		out = cv2.VideoWriter(os.path.join(self.savepath.get(),self.fileout.get())+'.avi', fourcc, 20.0, tuple(self.ss[:-1]))
+		for i in range(len(self.H_fp.T)):
+			frame = (self.W@np.diag(self.H_pp[:,i])@self.cmap[:,:-1]*self.sc).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8')
+			out.write(frame)
+		out.release()
+		print('Video written!')
 
 	def editsavepath(self):
 		self.savepath.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.savepath.get()))
@@ -171,11 +193,13 @@ class App_Window(Tk):
 		self.filterH=init_entry(0)
 		self.brightness=init_entry(0)
 		self.thresh=init_entry(0)
-		
 		self.oct_add = init_entry('0')
 		self.scaletype = init_entry('Chromatic (12/oct)')
 		self.key = init_entry('C')
 		self.audio_fmt = init_entry('Stream')
+
+		# Other vars
+		self.framenum = 1
 
 		# Labels
 		Label(text='').grid(row=0,column=0)
@@ -212,7 +236,7 @@ class App_Window(Tk):
 		# Buttons
 		Button(text='Edit save path',width=20,command=self.editsavepath).grid(row=7, column=1,columnspan=2)
 		Button(text='Play Notes',width=20).grid(row=6, column=5,columnspan=2)
-		Button(text='Update',command=lambda:[self.refreshH(),self.refreshW()]).grid(row=8, column=5,columnspan=2,sticky='WE')
+		Button(text='Update',command=self.refreshplots).grid(row=8, column=5,columnspan=2,sticky='WE')
 
 		# Options
 		self.oct_add_opts = ['0','1','2','3','4','5']
@@ -234,14 +258,14 @@ class App_Window(Tk):
 		menubar = Menu(self)
 		filemenu = Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.loadfrommat)
-		filemenu.add_command(label="Load from config", command=donothing)
+		filemenu.add_command(label="Load from config", command=self.donothing)
 		filemenu.add_command(label="Quit", command=self.quit)
 
 		savemenu = Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.htoaudio)
-		savemenu.add_command(label="Video", command=donothing)
-		savemenu.add_command(label="Combine A/V", command=donothing)
-		savemenu.add_command(label="Config File", command=donothing)
+		savemenu.add_command(label="Video", command=self.exportavi)
+		savemenu.add_command(label="Combine A/V", command=self.donothing)
+		savemenu.add_command(label="Config File", command=self.donothing)
 
 		menubar.add_cascade(label="File", menu=filemenu)
 		menubar.add_cascade(label="Save", menu=savemenu)
@@ -258,6 +282,14 @@ class App_Window(Tk):
 		ttk.Separator(self, orient='horizontal').grid(column=1, row=2, columnspan=2,sticky='swe')
 		ttk.Separator(self, orient='horizontal').grid(column=1, row=4, columnspan=2,sticky='swe')
 		ttk.Separator(self, orient='horizontal').grid(column=1, row=6, columnspan=2,sticky='swe')
+
+		# Offset var
+		self.offsetH = IntVar()
+		self.offsetH.set(1)
+		
+		# frameslider var 
+		self.frameslider = Scale(self, from_=0, to=1, orient=HORIZONTAL)
+
 		self.update()
 
 	def init_plots(self):
@@ -271,7 +303,10 @@ class App_Window(Tk):
 		self.Hax2.axis('off')
 		self.canvas_H = FigureCanvasTkAgg(self.figH, master=self)
 		self.canvas_H.draw()
-		self.canvas_H.get_tk_widget().grid(row=0,column=7,rowspan=29,columnspan=1)
+		self.canvas_H.get_tk_widget().grid(row=0,column=7,rowspan=29,columnspan=10)
+
+		# Checkbox
+		Checkbutton(self, text="Offset H",bg='white',command=self.refreshplots,variable=self.offsetH).grid(row=8,rowspan=3,column=16)
 
 		# Plot W
 		self.figW = plt.Figure(figsize=(6,3), dpi=100)
@@ -284,7 +319,7 @@ class App_Window(Tk):
 		self.canvas_W = FigureCanvasTkAgg(self.figW, master=self)
 		self.canvas_W.draw()
 		self.canvas_W.get_tk_widget().grid(row=9,column=1,rowspan=20,columnspan=6)
-		self.frameslider = Scale(self, from_=0, to=1, orient=HORIZONTAL)
+		
 		self.frameslider.grid(row=29, column=1, columnspan=3, sticky='EW')
 
 		self.update()
