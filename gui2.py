@@ -1,16 +1,42 @@
-from main import *
+from scipy.io import loadmat, whosmat
+from scipy.io.wavfile import write
+from scipy import signal
+import numpy as np
+from numpy.matlib import repmat
+from soundfile import read
+from midiutil import MIDIFile
+import os, random, sys, cv2, time, importlib, csv
+from tkinter import *
+import  tkinter.ttk as ttk
+from tkinter import filedialog as fd 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib import cm
+from pygame.mixer import Sound, init, quit, get_init, set_num_channels
 
+def init_entry(fn):
+	if isinstance(fn, str):
+		entry = StringVar()
+	else:
+		entry = DoubleVar()
+	entry.set(fn)
+	return entry
 
+def jet(dz):
+		tmp = cm.jet(np.linspace(0,1,dz))
+		return tmp
+		
 class App_Window(Tk):
 	def __init__(self,parent):
 		Tk.__init__(self,parent)
 		self.parent = parent
-		self.rootpath = os.sep.join(os.path.realpath(__file__).split(os.sep)[:-2])
-		#self.configure(background='white')
-		self.init()
+		self.rootpath = os.sep.join(os.path.realpath(__file__).split(os.sep)[:-1])
+		self.initGUI()
 	
 	def donothing(self):
 		pass
+	
+	
 
 	def loadfrommat(self):
 		vp = Toplevel(self)
@@ -53,6 +79,8 @@ class App_Window(Tk):
 			self.H_to_Hp()
 		else:
 			self.H_fp = self.H_pp
+		
+		self.makekeys() # addoct here
 
 		self.init_plots()
 		if self.frameslider.get() > len(self.H_pp.T):
@@ -69,13 +97,14 @@ class App_Window(Tk):
 			j.set_color(self.cmap[i])
 		self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none',cmap=plt.get_cmap('gray'))
 		self.H_p_plot.axes.set_aspect('auto')
+		#ax = plt.gca()
+		#ax.set_xticks(np.arange(0,len(self.H_fp.T),5))
+
 
 		ax = self.canvas_H.figure.axes[0]
 		ax.set_xlim(0, len(self.H_pp.T))
 		ax.set_ylim(np.min(tmpH), np.max(tmpH)) 
-		ax.spines['top'].set_visible(False)
-		ax.spines['right'].set_visible(False)
-		ax.spines['left'].set_visible(False)
+		#plt.xticks(range(0,len(self.H_fp.T),5), np.floor(np.linspace(0,len(self.H_fp.T)/self.fr.get(),num=5))) # Set text labels.
 		
 		self.canvas_H.draw()
 
@@ -89,8 +118,6 @@ class App_Window(Tk):
 		# Update slider max min
 		self.frameslider['to'] = int(len(self.H_pp.T)-1)
 		self.frameslider['command'] = self.refreshW_slider
-
-		plt.tight_layout()
 
 	def refreshW_slider(self,event):
 		self.imWH.remove()
@@ -106,7 +133,7 @@ class App_Window(Tk):
 		Hb[:,0] = 0
 		Hb[:,-1] = 0
 		Hmax = np.max(H)
-		self.H_fp = np.zeros(np.shape(H))
+		self.H_fp = np.zeros(np.shape(self.H_pp))
 		self.nd = {}
 		self.nd['st'],self.nd['en'],self.nd['note'],self.nd['mag'] = [],[],[],[]
 		for i in range(len(H)):
@@ -117,13 +144,28 @@ class App_Window(Tk):
 			self.nd['en'].extend([x/1000 for x in en])
 			for j in range(len(st)):
 				tmpmag = np.max(H[i,st[j][0]:en[j][0]])
-				self.H_fp[i,st[j][0]:en[j][0]] = tmpmag
+				self.H_fp[i,int(st[j][0]*self.fr.get()/1000):int(en[j][0]*self.fr.get()/1000)] = tmpmag
 				self.nd['mag'].append(int(tmpmag * 127 / Hmax))
 				self.nd['note'].append(keysfull[i])
 
+	def makekeys(self):
+		scaledata = []
+		nnotes = len(self.H_fp)
+		with open(os.path.join(self.rootpath,'AE','scaledata.csv')) as csvfile:
+			file = csv.reader(csvfile)
+			for row in file:
+				scaledata.append([int(x) for x in row if x != 'NaN'])
+		noteIDX = scaledata[self.scaletype_opts.index(self.scaletype.get())]
+		noteIDX = [k+self.key_opts.index(self.key.get()) for k in noteIDX]
+		keys = []
+		for i in range(int(np.ceil(nnotes/len(noteIDX)))):
+			keys.extend([k+i*12 for k in noteIDX])
+		keys = keys[:nnotes]
+		self.keys = [k+int(self.oct_add.get())*12 for k in keys]
+
 	def htoaudio(self):
 		# Make MIDI key pattern
-		self.keys = range(0,20)#self.makekeys() # addoct here
+		
 		if self.audio_fmt.get() == 'MIDI':
 			MIDI = MIDIFile(1)  # One track, defaults to format 1 (tempo track is created
 			MIDI.addTempo(0,0,60)
@@ -136,6 +178,24 @@ class App_Window(Tk):
 		elif self.audio_fmt.get() == 'Stream':
 			pass
 			# neural stream here!
+	
+	def previewnotes(self):
+		if get_init() is None:
+			init()
+			set_num_channels(128)
+		for i in range(len(self.keys)):
+			fn = os.path.join(self.rootpath,'AE',str(self.keys[i])+'_5_2.ogg');
+			sound = Sound(file=fn)
+			sound.play()
+			self.imW.remove()
+			Wtmp = self.W[:,self.Wshow[i]]
+			cmaptmp = self.cmap[self.Wshow[i],:-1]
+			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.W)).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
+			self.canvas_W.draw()
+			self.update()
+			time.sleep(.4)
+		
+		self.refreshplots()
 
 	def synth(self):
 		fs = 44100
@@ -146,7 +206,7 @@ class App_Window(Tk):
 		ext = 11
 		note = [[0] * 8 for i in range(3)]
 		raws = np.zeros((int(fs*(np.max(self.nd['st'])+ext)),2))
-		for i in tqdm(range(len(self.nd['st']))):
+		for i in range(len(self.nd['st'])):
 			if currnote != self.nd['note'][i]:
 				currnote = self.nd['note'][i]
 				for mag in range(8): # Load up new notes
@@ -181,7 +241,7 @@ class App_Window(Tk):
 	def editsavepath(self):
 		self.savepath.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.savepath.get()))
 
-	def init(self):
+	def initGUI(self):
 		# StringVars
 		self.filein=init_entry('...')
 		self.fileout=init_entry('...')
@@ -235,7 +295,7 @@ class App_Window(Tk):
 
 		# Buttons
 		Button(text='Edit save path',width=20,command=self.editsavepath).grid(row=7, column=1,columnspan=2)
-		Button(text='Play Notes',width=20).grid(row=6, column=5,columnspan=2)
+		Button(text='Play Notes',width=20,command=self.previewnotes).grid(row=6, column=5,columnspan=2)
 		Button(text='Update',command=self.refreshplots).grid(row=8, column=5,columnspan=2,sticky='WE')
 
 		# Options
@@ -259,7 +319,7 @@ class App_Window(Tk):
 		filemenu = Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.loadfrommat)
 		filemenu.add_command(label="Load from config", command=self.donothing)
-		filemenu.add_command(label="Quit", command=self.quit)
+		filemenu.add_command(label="Quit",command=lambda:[self.quit(),quit()])
 
 		savemenu = Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.htoaudio)
@@ -290,17 +350,14 @@ class App_Window(Tk):
 		# frameslider var 
 		self.frameslider = Scale(self, from_=0, to=1, orient=HORIZONTAL)
 
-		self.update()
-
 	def init_plots(self):
-		# Plot H
+		# H
 		self.figH = plt.Figure(figsize=(6,6), dpi=100)
 		self.Hax1 = self.figH.add_subplot(211)
 		self.Hax2 = self.figH.add_subplot(212)
 		self.Hax1.set_title('Raw Temporal Data (H)')
 		self.Hax2.set_title('Converted Temporal Data (H\')')
 		self.Hax1.axis('off')
-		self.Hax2.axis('off')
 		self.canvas_H = FigureCanvasTkAgg(self.figH, master=self)
 		self.canvas_H.draw()
 		self.canvas_H.get_tk_widget().grid(row=0,column=7,rowspan=29,columnspan=10)
@@ -308,7 +365,7 @@ class App_Window(Tk):
 		# Checkbox
 		Checkbutton(self, text="Offset H",bg='white',command=self.refreshplots,variable=self.offsetH).grid(row=8,rowspan=3,column=16)
 
-		# Plot W
+		# W
 		self.figW = plt.Figure(figsize=(6,3), dpi=100)
 		self.Wax1 = self.figW.add_subplot(121)
 		self.Wax2 = self.figW.add_subplot(122)
@@ -320,9 +377,8 @@ class App_Window(Tk):
 		self.canvas_W.draw()
 		self.canvas_W.get_tk_widget().grid(row=9,column=1,rowspan=20,columnspan=6)
 		
+		# Frameslider
 		self.frameslider.grid(row=29, column=1, columnspan=3, sticky='EW')
-
-		self.update()
 
 if __name__ == "__main__":
 	MainWindow = App_Window(None)
