@@ -1,0 +1,11 @@
+{
+  "base_url": "/",
+  "hostname": "localhost",
+  "notebook_dir": "C:\\Users\\dnt21\\Desktop\\skynav",
+  "password": false,
+  "pid": 10016,
+  "port": 8888,
+  "secure": false,
+  "token": "ed44433c946a80074f039828db938dec48c73f90e3d633bb",
+  "url": "http://localhost:8888/"
+}

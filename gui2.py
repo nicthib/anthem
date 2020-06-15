@@ -36,8 +36,6 @@ class App_Window(Tk):
 	def donothing(self):
 		pass
 	
-	
-
 	def loadfrommat(self):
 		vp = Toplevel(self)
 		self.inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
@@ -125,7 +123,6 @@ class App_Window(Tk):
 		self.canvas_W.draw()
 
 	def H_to_Hp(self):
-		keysfull = range(20)
 		ns = int(1000*len(self.H_pp.T)/self.fr.get())
 		H = signal.resample(self.H_pp, ns, axis=1)
 		Hb = H > self.thresh.get()
@@ -146,7 +143,7 @@ class App_Window(Tk):
 				tmpmag = np.max(H[i,st[j][0]:en[j][0]])
 				self.H_fp[i,int(st[j][0]*self.fr.get()/1000):int(en[j][0]*self.fr.get()/1000)] = tmpmag
 				self.nd['mag'].append(int(tmpmag * 127 / Hmax))
-				self.nd['note'].append(keysfull[i])
+				self.nd['note'].append(self.keys[i])
 
 	def makekeys(self):
 		scaledata = []
@@ -165,7 +162,6 @@ class App_Window(Tk):
 
 	def htoaudio(self):
 		# Make MIDI key pattern
-		
 		if self.audio_fmt.get() == 'MIDI':
 			MIDI = MIDIFile(1)  # One track, defaults to format 1 (tempo track is created
 			MIDI.addTempo(0,0,60)
@@ -186,15 +182,13 @@ class App_Window(Tk):
 		for i in range(len(self.keys)):
 			fn = os.path.join(self.rootpath,'AE',str(self.keys[i])+'_5_2.ogg');
 			sound = Sound(file=fn)
-			sound.play()
 			self.imW.remove()
 			Wtmp = self.W[:,self.Wshow[i]]
 			cmaptmp = self.cmap[self.Wshow[i],:-1]
 			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.W)).reshape(self.ss[0],self.ss[1],3).clip(min=0,max=255).astype('uint8'))
 			self.canvas_W.draw()
-			self.update()
-			time.sleep(.4)
-		
+			sound.play()
+			time.sleep(.5)
 		self.refreshplots()
 
 	def synth(self):
@@ -257,9 +251,6 @@ class App_Window(Tk):
 		self.scaletype = init_entry('Chromatic (12/oct)')
 		self.key = init_entry('C')
 		self.audio_fmt = init_entry('Stream')
-
-		# Other vars
-		self.framenum = 1
 
 		# Labels
 		Label(text='').grid(row=0,column=0)
