@@ -16,9 +16,8 @@ import os, random, sys, cv2, time, csv
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 def AE_init():
-	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
-		print('Cloning the audio engine to the anthem package directory...')
+		print('Cloning the audio engine to the pyanthem package directory...')
 		Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
 		print('Audio engine downloaded to {}'.format(AE_path))
 	else:
@@ -36,7 +35,11 @@ class GUI(Tk):
 	def __init__(self):
 		Tk.__init__(self)
 		self.rootpath = os.path.split(os.path.realpath(__file__))[0]
-		if not os.path.isdir(os.path.join(self.rootpath,'AE')):
+		if __name__ == "__main__":
+			AE_path = r'C:\Users\dnt21\AppData\Local\Programs\Python\Python37-32\Lib\site-packages\pyanthem\AE'
+		else:
+			AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
+		if not os.path.isdir(AE_path):
 			print('ERROR: Audio engine not downloaded. Please do so using the command AE_init()')
 			self.runGUI = False
 		else:
