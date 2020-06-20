@@ -1,3 +1,5 @@
+import os, random, sys, cv2, time, csv
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 from scipy.io import loadmat, whosmat
 from scipy.io.wavfile import write
 from scipy import signal
@@ -11,17 +13,22 @@ from tkinter.ttk import Progressbar, Separator
 from tkinter import filedialog as fd 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.cm import jet
 from pygame.mixer import Sound, init, quit, get_init, set_num_channels
-import os, random, sys, cv2, time, csv
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
-def AE_init():
+def AE_install():
+	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
 		print('Cloning the audio engine to the pyanthem package directory...')
 		Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
 		print('Audio engine downloaded to {}'.format(AE_path))
 	else:
 		print('Audio engine is already present in {}'.format(AE_path))
+		
+def AE_uninstall():
+	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
+	os.remove(AE_path)
+	print('Audio engine uninstalled.')
 
 def init_entry(fn):
 	if isinstance(fn, str):
@@ -96,7 +103,7 @@ class GUI(Tk):
 		self.init_plots()
 		if self.frameslider.get() > len(self.H_pp.T):
 			self.frameslider.set(1)
-		self.cmap = matplotlib.cm.jet(np.linspace(0,1,len(self.H_fp)))
+		self.cmap = jet(np.linspace(0,1,len(self.H_fp)))
 		Hstd = self.H_pp.std()*3
 		if self.offsetH.get():
 			tmpH = self.H_pp.T + repmat([w*Hstd for w in self.Wshow],len(self.H_pp.T),1)
@@ -178,7 +185,7 @@ class GUI(Tk):
 				MIDI.addNote(0, 0, int(self.nd['note'][j]), self.nd['st'][j]/1000, (self.nd['en'][j]-self.nd['st'][j])/1000, self.nd['mag'][j])
 			with open(file_name, 'wb') as output_file:
 				MIDI.writeFile(os.path.combine(self.savepath.get(),self.fileout.get()))
-		elif self.audio_fmt.get() == 'Dynamic':
+		elif self.audio_fmt.get() == 'Piano':
 			self.synth()
 		elif self.audio_fmt.get() == 'Stream':
 			pass
@@ -315,7 +322,7 @@ class GUI(Tk):
 		'Maj. 7th (4/oct)','Min. 7th (4/oct)','Aug. 7th (4/oct)',
 		'Dim. 7th (4/oct)','Maj. 7/9 (5/oct)','Min. 7/9 (5/oct)']
 		self.key_opts = ['C','C#/D♭','D','D#/E♭','E','F','F#/G♭','G','G#/A♭','A','A#/B♭','B']
-		self.audio_fmt_opts = ['Stream','Dynamic','MIDI']
+		self.audio_fmt_opts = ['Stream','Piano','MIDI']
 
 		# Option Menus
 		OptionMenu(self,self.oct_add,*self.oct_add_opts).grid(row=2, column=6, sticky='W')

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyanthem",
-    version="0.6",
+    version="0.16",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="py-anthem",
@@ -33,3 +33,4 @@ setuptools.setup(
 # For MANIFEST:
 # recursive-include pyanthem/AE *.ogg
 # recursive-include pyanthem/AE/scaledata.csv
+# recursive-include pyanthem/AE *.txt

@@ -8,3 +8,4 @@ pyanthem.egg-info/SOURCES.txt
 pyanthem.egg-info/dependency_links.txt
 pyanthem.egg-info/requires.txt
 pyanthem.egg-info/top_level.txt
+pyanthem/AE/Audio engine goes here.txt

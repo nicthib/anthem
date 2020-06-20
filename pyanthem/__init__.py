@@ -1,1 +1,1 @@
-from pyanthem.pyanthem import AE_init, init_entry, GUI
+from pyanthem.pyanthem import AE_install, AE_uninstall, init_entry, GUI
