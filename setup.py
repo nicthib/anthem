@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyanthem",
-    version="0.16",
+    version="0.26",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="py-anthem",
@@ -20,8 +20,11 @@ setuptools.setup(
         'GitPython',
         'matplotlib',
         'pygame',
-        'opencv-python'
+        'opencv-python',
+        'sklearn',
+        'h5py'
       ],
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -34,3 +37,4 @@ setuptools.setup(
 # recursive-include pyanthem/AE *.ogg
 # recursive-include pyanthem/AE/scaledata.csv
 # recursive-include pyanthem/AE *.txt
+

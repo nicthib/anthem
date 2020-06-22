@@ -5,3 +5,4 @@ GitPython
 matplotlib
 pygame
 opencv-python
+sklearn

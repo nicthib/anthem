@@ -1,1 +1,1 @@
-recursive-include pyanthem/AE *.txt
+include scaledata.csv

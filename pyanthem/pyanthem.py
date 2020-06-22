@@ -1,7 +1,7 @@
 import os, random, sys, cv2, time, csv
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-from scipy.io import loadmat, whosmat
-from scipy.io.wavfile import write
+from scipy.io import loadmat, savemat, whosmat
+from scipy.io.wavfile import write as wavwrite
 from scipy import signal
 import numpy as np
 from numpy.matlib import repmat
@@ -15,20 +15,17 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.cm import jet
 from pygame.mixer import Sound, init, quit, get_init, set_num_channels
+from sklearn.cluster import KMeans
+from scipy.optimize import nnls
 
-def AE_install():
+def AE_download():
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
 		print('Cloning the audio engine to the pyanthem package directory...')
 		Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
 		print('Audio engine downloaded to {}'.format(AE_path))
 	else:
-		print('Audio engine is already present in {}'.format(AE_path))
-		
-def AE_uninstall():
-	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
-	os.remove(AE_path)
-	print('Audio engine uninstalled.')
+		print('Audio engine is already present in {}. If you want to uninstall, you must manually delete the AE folder.'.format(AE_path))
 
 def init_entry(fn):
 	if isinstance(fn, str):
@@ -37,7 +34,66 @@ def init_entry(fn):
 		entry = DoubleVar()
 	entry.set(fn)
 	return entry
-		
+
+def process_raw(k=[],fr=[]):
+	root = Tk()
+	root.withdraw()
+	file = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
+	if len(file) == 0:
+		return
+	root.update()
+	dh,var = loadmat(file),whosmat(file)
+	data = dh[var[0][0]]
+	sh = data.shape
+	if len(sh) != 3:
+		print('ERROR: input dataset is not 3D.')
+		return
+	data = data.reshape(sh[0]*sh[1],sh[2])
+	# Ignore rows with any nans
+	nanidx = np.any(np.isnan(data), axis=1)
+	data_nn = data[~nanidx] # nn=non-nan
+	# k-means
+	print('Performing k-means...',end='')
+	if k == []:
+		k = int(len(data)**.25)
+		print('No k given. Defaulting to {}'.format(str(k)))
+	idx_nn = KMeans(n_clusters=k, random_state=0).fit(data_nn).labels_
+	idx = np.zeros((len(data),))
+	idx[nanidx==False] = idx_nn
+	# TCs
+	H = np.zeros((k,len(data.T)))
+	for i in range(k):
+		H[i,:] = np.nanmean(data[idx==i,:],axis=0)
+	print('done.')
+	# NNLS
+	nnidx=np.where(~nanidx)[0]
+	W = np.zeros((len(data),k))
+	print('Performing NNLS...',end='')
+	for i in range(len(nnidx)):
+		W[nnidx[i],:]=nnls(H.T,data_nn[i,:])[0]
+	# Sort top to bottom
+	xc,yc = [], []
+	(X,Y) = np.meshgrid(range(sh[0]),range(sh[1]))
+	for i in range(len(W.T)):
+		Wtmp = W[:,i].reshape(sh[0],sh[1])
+		xc.append((X*Wtmp).sum() / Wtmp.sum().astype("float"))
+		yc.append((Y*Wtmp).sum() / Wtmp.sum().astype("float"))
+	I = np.argsort(yc)
+	W = W[:,I]
+	H = H[I,:]
+	print('done.')
+	df = {}
+	df['H'] = H
+	df['W'] = W.reshape(sh[0],sh[1],k)
+	if fr == []:
+		df['fr'] = 10
+		print('No fr given. Defaulting to 10')
+	else:
+		df['fr'] = fr
+	fn = file.replace('.mat','_decomp.mat')
+	savemat(fn,df)
+	print('Decomposed data file saved to {}'.format(fn))
+
 class GUI(Tk):
 	def __init__(self):
 		Tk.__init__(self)
@@ -46,39 +102,25 @@ class GUI(Tk):
 			AE_path = r'C:\Users\dnt21\AppData\Local\Programs\Python\Python37-32\Lib\site-packages\pyanthem\AE'
 		else:
 			AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
-		if not os.path.isdir(AE_path):
-			print('ERROR: Audio engine not downloaded. Please do so using the command AE_init()')
-			self.runGUI = False
+		if os.path.isdir(AE_path):
+			self.AE_run = True
 		else:
-			self.runGUI = True
+			self.AE_run = False
 		self.initGUI()
 	
 	def donothing(self):
 		pass
 	
 	def loadfrommat(self):
-		vp = Toplevel(self)
 		self.inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
 		if not self.inputfile:
-			vp.destroy()
 			return None, None, None
-		vp.attributes("-topmost", True)
-		vs = whosmat(self.inputfile)
-		vname,vsize = [v[0] for v in vs],[v[1] for v in vs]
-
-		# Layout dropdowns and quit button
-		Label(vp,text='Temporal variable').grid(row=0,column=0, padx=20)
-		Label(vp,text='Spatial variable').grid(row=0,column=1, padx=20)
-		varH = StringVar(vp)
-		varH.set(vname[0])
-		varW = StringVar(vp)
-		varW.set(vname[0])
-		OptionMenu(vp,varH,*vname).grid(row=1, column=0)
-		OptionMenu(vp,varW,*vname).grid(row=1, column=1)
-		Button(vp,text='Done',command=lambda:[vp.quit(),vp.destroy()],width=10).grid(row=2,column=0,columnspan=3)
-		vp.mainloop()
-		dh = loadmat(self.inputfile)
-		self.H, self.W = dh[varH.get()], dh[varW.get()]
+		try:
+			dh = loadmat(self.inputfile)
+			self.H, self.W = dh['H'], dh['W']
+			self.fr.set(float((dh['fr'])))
+		except:
+			self.status['text'] = 'Status: File load ERROR - please input a .mat file with variables H, W,and fr.'
 		self.ss = self.W.shape
 		self.W = self.W.reshape(self.W.shape[0]*self.W.shape[1],self.W.shape[2])
 		self.Wshow = list(range(len(self.H)))
@@ -93,17 +135,12 @@ class GUI(Tk):
 		# H_pp is pre-processed
 		# H_fp is fully processed
 		self.H_pp = self.H[self.Wshow,int(len(self.H.T)*self.st_p.get()/100):int(len(self.H.T)*self.en_p.get()/100)] + self.baseline.get()
-		if self.audio_fmt.get() != 'Stream':
-			self.H_to_Hp()
-		else:
-			self.H_fp = self.H_pp
-		
 		self.makekeys() # addoct here
-
+		self.H_to_Hp()
 		self.init_plots()
 		if self.frameslider.get() > len(self.H_pp.T):
 			self.frameslider.set(1)
-		self.cmap = jet(np.linspace(0,1,len(self.H_fp)))
+		self.cmap = jet(np.linspace(0,1,len(self.H_pp)))
 		Hstd = self.H_pp.std()*3
 		if self.offsetH.get():
 			tmpH = self.H_pp.T + repmat([w*Hstd for w in self.Wshow],len(self.H_pp.T),1)
@@ -113,7 +150,11 @@ class GUI(Tk):
 		self.H_plot = self.Hax1.plot(tmpH,linewidth=.5)
 		for i,j in enumerate(self.Hax1.lines):
 			j.set_color(self.cmap[i])
-		self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none',cmap=plt.get_cmap('gray'))
+		if self.audio_fmt.get() == 'Stream':
+			self.H_p_plot = self.Hax2.imshow(self.H_pp,interpolation='none',cmap=plt.get_cmap('gray'))
+		else:
+			self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none',cmap=plt.get_cmap('gray'))
+
 		self.H_p_plot.axes.set_aspect('auto')
 
 		ax = self.canvas_H.figure.axes[0]
@@ -163,8 +204,8 @@ class GUI(Tk):
 
 	def makekeys(self):
 		scaledata = []
-		nnotes = len(self.H_fp)
-		with open(os.path.join(self.rootpath,'AE','scaledata.csv')) as csvfile:
+		nnotes = len(self.H_pp)
+		with open(os.path.join(self.rootpath,'scaledata.csv')) as csvfile:
 			file = csv.reader(csvfile)
 			for row in file:
 				scaledata.append([int(x) for x in row if x != 'NaN'])
@@ -179,19 +220,24 @@ class GUI(Tk):
 	def htoaudio(self):
 		# Make MIDI key pattern
 		if self.audio_fmt.get() == 'MIDI':
-			MIDI = MIDIFile(1)  # One track, defaults to format 1 (tempo track is created
-			MIDI.addTempo(0,0,60)
-			for i in range(len(nd)):
-				MIDI.addNote(0, 0, int(self.nd['note'][j]), self.nd['st'][j]/1000, (self.nd['en'][j]-self.nd['st'][j])/1000, self.nd['mag'][j])
-			with open(file_name, 'wb') as output_file:
-				MIDI.writeFile(os.path.combine(self.savepath.get(),self.fileout.get()))
+			fn = os.path.join(self.savepath.get(),self.fileout.get())+'.mid'
+			print(fn)
+			MIDI = MIDIFile(1)  # One track
+			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
+			for j in range(len(self.nd['note'])):
+				# addNote(track, channel, pitch, time + i, duration, volume)
+				MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
+			with open(fn, 'wb') as mid:
+				MIDI.writeFile(mid)
 		elif self.audio_fmt.get() == 'Piano':
 			self.synth()
 		elif self.audio_fmt.get() == 'Stream':
-			pass
-			# neural stream here!
+			self.neuralstream()
 	
 	def previewnotes(self):
+		if not self.AE_run:
+			self.status['text'] = 'Status: AE engine not downloaded. Please do so using the function AE_download() to preview notes.'
+			return
 		if get_init() is None:
 			init()
 			set_num_channels(128)
@@ -209,6 +255,7 @@ class GUI(Tk):
 		self.refreshplots()
 
 	def synth(self):
+		print('Keys are ' + str(self.nd['note']))
 		fs = 44100
 		r = .5 # release for note
 		#r_mat = np.linspace(1, 0, num=int(fs*r))
@@ -227,18 +274,36 @@ class GUI(Tk):
 			L = self.nd['en'][i]-self.nd['st'][i]
 			L = min(L,10-r)
 			if L > 1:
-				raw = note[2][int(np.ceil(self.nd['mag'][i]/16-1))][:]#[0:int(L*fs)] # Truncate to note length plus release
+				raw = note[2][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
 			elif 1 > L > .25:
-				raw = note[1][int(np.ceil(self.nd['mag'][i]/16-1))][:]#[0:int(L*fs)] # Truncate to note length plus release
+				raw = note[1][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
 			elif L < .25:
-				raw = note[0][int(np.ceil(self.nd['mag'][i]/16-1))][:]#[0:int(L*fs)] # Truncate to note length plus release
+				raw = note[0][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
 			#raw[-int(fs*r):] *= r_mat
 			inds = range(int(self.nd['st'][i][0]*fs),int(self.nd['st'][i][0]*fs)+len(raw))
 			raws[inds,:] += raw
 			self.status['text'] = 'Status: writing audio file, {} out of {} notes written'.format(i+1,len(self.nd['st']))
 			self.update()
 		raws = raws[:-fs*(ext-1),:] # Crop wav
-		write(os.path.join(self.savepath.get(),self.fileout.get())+'.wav',fs,raws)
+		raws = np.int16(raws/np.max(np.abs(raws)) * 32767)
+		wavwrite(os.path.join(self.savepath.get(),self.fileout.get())+'.wav',fs,raws)
+		self.status['text'] = 'Status: audio file written to {}'.format(self.savepath.get())
+
+	def neuralstream(self):
+		self.status['text'] = 'Writing audio file...'
+		C0 = 16.352
+		fs = 44100
+		freqs = [C0*2**(i/12) for i in range(128)]
+		ns = int(fs*len(self.H_fp.T)/self.fr.get())
+		H = signal.resample(self.H_fp, ns, axis=1)
+		Hb = H > self.baseline.get()
+		Hb = Hb * 1
+		t = np.linspace(0,len(self.H_fp.T)/self.fr.get(),ns)
+		for n in range(len(H)):
+			H[n,:] *= np.sin(2*np.pi*freqs[self.keys[n]]*t) 
+		wav = np.hstack((np.sum(H,axis=0).T,np.sum(H,axis=0).T)).T
+		wav = np.int16(wav/np.max(np.abs(wav)) * 32767)
+		wavwrite(os.path.join(self.savepath.get(),self.fileout.get())+'.wav',fs,wav)
 		self.status['text'] = 'Status: audio file written to {}'.format(self.savepath.get())
 
 	def exportavi(self):
@@ -251,16 +316,21 @@ class GUI(Tk):
 			self.update()
 		out.release()
 		self.status['text'] = 'Status: video file written to {}'.format(self.savepath.get())
+	
+	def combineAV(self):
+		import moviepy.editor as mpe
+		fn = os.path.join(self.savepath.get(),self.fileout.get())
+		my_clip = mpe.VideoFileClip(fn+'.avi')
+		audio_background = mpe.AudioFileClip(fn+'.wav')
+		final_clip = my_clip.set_audio(audio_background)
+		final_clip.write_videofile(fn+'_AV.avi',fps=self.fr.get(),codec='mpeg4')
+		self.status['text'] = 'Status: video file w/ audio written to {}'.format(self.savepath.get())
 
 	def editsavepath(self):
 		self.savepath.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.savepath.get()))
 
 	def initGUI(self):
-		# StringVars
-		if not self.runGUI:
-			self.quit()
-			self.destroy()
-			return
+		# StringVars		
 		self.filein=init_entry('...')
 		self.fileout=init_entry('...')
 		self.savepath=init_entry('...')
@@ -275,14 +345,19 @@ class GUI(Tk):
 		self.scaletype = init_entry('Chromatic (12/oct)')
 		self.key = init_entry('C')
 		self.audio_fmt = init_entry('Stream')
-		self.status = init_entry('Status: ')
+		self.status = init_entry('Status: Welcome to pyanthem!')
+
 		# Labels
+
 		Label(text='').grid(row=0,column=0)
+		Label(text='File Parameters',font='Helvetica 14 bold').grid(row=0,column=1,columnspan=2,sticky='WE')
+		Label(text='Movie Parameters',font='Helvetica 14 bold').grid(row=0,column=3,columnspan=2,sticky='WE')
+		Label(text='Audio Parameters',font='Helvetica 14 bold').grid(row=0,column=5,columnspan=2,sticky='WE')
 		Label(text='Input Filename').grid(row=1, column=1,columnspan=2,sticky='W')
 		Label(textvariable=self.filein).grid(row=2, column=1,columnspan=2,sticky='W')
 		Label(text='Output Filename').grid(row=3, column=1,columnspan=2,sticky='W')
 		Label(text='Output Save Path').grid(row=5, column=1,columnspan=2,sticky='W')
-		Label(textvariable=self.savepath, wraplength=500).grid(row=6, column=1,columnspan=2,sticky='W')
+		Message(textvariable=self.savepath,aspect=500).grid(row=6, column=1,columnspan=2,sticky='W')
 		Label(text='Framerate').grid(row=1, column=3, sticky='E')
 		Label(text='Start (%)').grid(row=2, column=3, sticky='E')
 		Label(text='End (%)').grid(row=3, column=3, sticky='E')
@@ -294,8 +369,8 @@ class GUI(Tk):
 		Label(text='Scale Type').grid(row=3, column=5, sticky='E')
 		Label(text='Key').grid(row=4, column=5, sticky='E')
 		Label(text='Audio format').grid(row=5, column=5, sticky='E')
-		self.status = Label(text='Status:')
-		self.status.grid(row=8, column=1,columnspan=4, sticky='W')
+		self.status = Message(text='Status: welcome to pyathem!',aspect=1000)
+		self.status.grid(row=8, column=1,columnspan=4)
 		#Label(text='Components to show').grid(row=108, column=5)
 
 		# Entries
@@ -310,9 +385,9 @@ class GUI(Tk):
 		#self.Wshow = Entry(text='',width=5).grid(row=109, column=4, columnspan=3)
 
 		# Buttons
-		Button(text='Edit save path',width=20,command=self.editsavepath).grid(row=7, column=1,columnspan=2)
-		Button(text='Play Notes',width=20,command=self.previewnotes).grid(row=6, column=5,columnspan=2)
-		Button(text='Update',command=self.refreshplots).grid(row=8, column=5,columnspan=2,sticky='WE')
+		Button(text='Edit save path',width=15,command=self.editsavepath).grid(row=7, column=1,columnspan=2)
+		Button(text='Preview Notes',width=15,command=self.previewnotes).grid(row=6, column=5,columnspan=2)
+		Button(text='Update',width=15,command=self.refreshplots).grid(row=8, column=5,columnspan=2)
 
 		# Options
 		self.oct_add_opts = ['0','1','2','3','4','5']
@@ -322,7 +397,11 @@ class GUI(Tk):
 		'Maj. 7th (4/oct)','Min. 7th (4/oct)','Aug. 7th (4/oct)',
 		'Dim. 7th (4/oct)','Maj. 7/9 (5/oct)','Min. 7/9 (5/oct)']
 		self.key_opts = ['C','C#/D♭','D','D#/E♭','E','F','F#/G♭','G','G#/A♭','A','A#/B♭','B']
-		self.audio_fmt_opts = ['Stream','Piano','MIDI']
+		if self.AE_run:
+			self.audio_fmt_opts = ['Stream','Piano','MIDI']
+		else:
+			self.audio_fmt_opts = ['Stream','MIDI']
+			self.status['text'] = 'Status: AE engine not downloaded. Please do using AE_download() to enable "Piano" format'
 
 		# Option Menus
 		OptionMenu(self,self.oct_add,*self.oct_add_opts).grid(row=2, column=6, sticky='W')
@@ -340,7 +419,7 @@ class GUI(Tk):
 		savemenu = Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.htoaudio)
 		savemenu.add_command(label="Video", command=self.exportavi)
-		savemenu.add_command(label="Combine A/V", command=self.donothing)
+		savemenu.add_command(label="Combine A/V", command=self.combineAV)
 		savemenu.add_command(label="Config File", command=self.donothing)
 
 		menubar.add_cascade(label="File", menu=filemenu)
@@ -348,10 +427,11 @@ class GUI(Tk):
 		self.config(menu=menubar)
 
 		# Seperators
-		Separator(self, orient='vertical').grid(column=0, row=1, rowspan=8, sticky='nse')
-		Separator(self, orient='vertical').grid(column=2, row=1, rowspan=7, sticky='nse')
-		Separator(self, orient='vertical').grid(column=4, row=1, rowspan=7, sticky='nse')
-		Separator(self, orient='vertical').grid(column=6, row=1, rowspan=8, sticky='nse')
+		Separator(self, orient='vertical').grid(column=0, row=0, rowspan=9, sticky='nse')
+		Separator(self, orient='vertical').grid(column=2, row=0, rowspan=8, sticky='nse')
+		Separator(self, orient='vertical').grid(column=4, row=0, rowspan=8, sticky='nse')
+		Separator(self, orient='vertical').grid(column=6, row=0, rowspan=9, sticky='nse')
+		Separator(self, orient='horizontal').grid(column=1, row=0, columnspan=6,sticky='nwe')
 		Separator(self, orient='horizontal').grid(column=1, row=0, columnspan=6,sticky='swe')
 		Separator(self, orient='horizontal').grid(column=1, row=7, columnspan=6,sticky='swe')
 		Separator(self, orient='horizontal').grid(column=1, row=8, columnspan=6,sticky='swe')
