@@ -6,3 +6,4 @@ matplotlib
 pygame
 opencv-python
 sklearn
+h5py
