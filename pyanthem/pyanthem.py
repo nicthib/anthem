@@ -295,15 +295,14 @@ class GUI(Tk):
 	
 	def preview_notes(self):
 		if not self.AE_run:
-			self.status['text'] = 'Status: AE engine not downloaded. Please do so using the function AE_download() to preview notes.'
-			return
+			self.status['text'] = 'Status: AE engine not downloaded. Please do so using the function AE_download() to preview piano notes.'
 		if get_init() is None: # Checks if pygame has initialized audio engine. Only needs to be run once per instance
 			pre_init(44100, -16, 2, 1024)
 			init()
 			set_num_channels(128) # We will never need more than 128...
 		for i in range(len(self.keys)):
 			# Load/play notes
-			if self.audio_format.get()=='Stream':
+			if self.audio_format.get()!='Piano':
 				sound = sine_wave(16.352*2**(self.keys[i]/12), 13000)
 			else:
 				fn = os.path.join(self.AE_path,str(self.keys[i])+'_5_2.ogg');
