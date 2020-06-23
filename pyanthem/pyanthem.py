@@ -1,4 +1,4 @@
-import os, random, sys, cv2, time, csv
+import os, random, sys, cv2, time, csv, h5py
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 from scipy.io import loadmat, savemat, whosmat
 from scipy.io.wavfile import write as wavwrite
@@ -148,7 +148,8 @@ class GUI(Tk):
 			self.H, self.W = dh['H'], dh['W']
 			self.fr.set(float((dh['fr'])))
 		except:
-			self.status['text'] = 'Status: File load ERROR - please input a .mat file with variables H, W,and fr.'
+			self.status['text'] = 'Status: File load ERROR - please input a .mat file with variables H, W, and fr.'
+			return
 		self.W_shape = self.W.shape
 		self.W = self.W.reshape(self.W.shape[0]*self.W.shape[1],self.W.shape[2])
 		self.file_in.set(os.path.splitext(os.path.split(inputfile)[1])[0])
@@ -388,13 +389,15 @@ class GUI(Tk):
 		self.status['text'] = 'Status: video file written to {}'.format(self.save_path.get())
 	
 	def combineAV(self):
-		import moviepy.editor as mpe
-		fn = os.path.join(self.save_path.get(),self.file_out.get())
+		import moviepy.editor as mpe # Weird error when putting this in the main imports, so it goes here.
+		fn = os.path.join(self.savepath.get(),self.fileout.get())
 		my_clip = mpe.VideoFileClip(fn+'.avi')
 		audio_background = mpe.AudioFileClip(fn+'.wav')
 		final_clip = my_clip.set_audio(audio_background)
 		final_clip.write_videofile(fn+'_AV.avi',fps=self.fr.get(),codec='mpeg4')
-		self.status['text'] = 'Status: video file w/ audio written to {}'.format(self.save_path.get())
+		os.remove(fn+'.avi')
+		os.remove(fn+'.wav')
+		self.status['text'] = 'Status: video file w/ audio written to {}'.format(self.savepath.get())
 
 	def editsave_path(self):
 		self.save_path.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.save_path.get()))
