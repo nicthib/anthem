@@ -1,29 +1,28 @@
 import os, random, sys, cv2, time, csv, h5py
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+from tkinter import *
+from tkinter.ttk import Progressbar, Separator
+from tkinter import filedialog as fd 
 from scipy.io import loadmat, savemat, whosmat
 from scipy.io.wavfile import write as wavwrite
-from scipy import signal
+from scipy.optimize import nnls
+from scipy.interpolate import interp1d
+from scipy.signal import resample
+from pygame.mixer import Sound, init, quit, get_init, set_num_channels, pre_init
+from pygame.sndarray import make_sound
+from pygame.time import delay
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.cm import *
+#https://matplotlib.org/gallery/color/colormap_reference.html
+import matplotlib.ticker as tkr 
 import numpy as np
 from numpy.matlib import repmat
 from soundfile import read
 from midiutil import MIDIFile
 from git import Repo
-from tkinter import *
-from tkinter.ttk import Progressbar, Separator
-from tkinter import filedialog as fd 
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.cm import jet
-import matplotlib.ticker as tkr 
-from pygame.mixer import Sound, init, quit, get_init, set_num_channels, pre_init
-from pygame.sndarray import make_sound
-from pygame.time import delay
 from sklearn.cluster import KMeans
-from scipy.optimize import nnls
-from scipy.interpolate import interp1d
 
-# Glossary of self variables
-# package_path: path to the pyanthem package
 
 def AE_download():
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
@@ -103,24 +102,24 @@ def process_raw(k=[],fr=[]):
 	print('Decomposed data file saved to {}'.format(fn))
 
 def play_for(sample_wave, ms):
-    sound = make_sound(sample_wave)
-    sound.play(-1)
-    delay(ms)
-    sound.stop()
-    
+	sound = make_sound(sample_wave)
+	sound.play(-1)
+	delay(ms)
+	sound.stop()
+	
 def sine_wave(hz, peak, n_samples=22000):
-    length = 44100 / float(hz)
-    omega = np.pi * 2 / length
-    xvalues = np.arange(int(length)) * omega
-    onecycle = peak * np.sin(xvalues)
-    sound = np.resize(onecycle, (n_samples,))
-    env = np.ones(len(sound),)
-    attack = int(44100*.15)
-    env[:attack] = np.linspace(0,1,attack)
-    env[-attack:] = np.linspace(1,0,attack)
-    sound=sound*env
-    sound = np.hstack((sound[:,None],sound[:,None]))
-    return sound.astype(np.int16)
+	length = 44100 / float(hz)
+	omega = np.pi * 2 / length
+	xvalues = np.arange(int(length)) * omega
+	onecycle = peak * np.sin(xvalues)
+	sound = np.resize(onecycle, (n_samples,))
+	env = np.ones(len(sound),)
+	attack = int(44100*.15)
+	env[:attack] = np.linspace(0,1,attack)
+	env[-attack:] = np.linspace(1,0,attack)
+	sound=sound*env
+	sound = np.hstack((sound[:,None],sound[:,None]))
+	return sound.astype(np.int16)
 
 class GUI(Tk):
 	def __init__(self):
@@ -159,27 +158,37 @@ class GUI(Tk):
 		# Set param defaults
 		self.brightness.set(f'{float(f"{np.max(self.H):.3g}"):g}')
 		self.threshold.set(f'{float(f"{np.mean(self.H):.3g}"):g}')
-		self.Wshow = list(range(len(self.H)))
+		self.Wshow_arr = list(range(len(self.H)))
 		self.refreshplots()
 
 	def refreshplots(self):
-		self.H_pp = self.H[self.Wshow,int(len(self.H.T)*self.st_p.get()/100):int(len(self.H.T)*self.en_p.get()/100)]# + self.baseline.get()
-		self.makekeys()
+		if self.Wshow.get() == 'all':
+			self.Wshow_arr = list(range(len(self.H)))
+		elif re.match('^\[[0-9,: ]*\]$',self.Wshow.get()) is not None:
+			w = eval('np.r_'+self.Wshow.get())
+			self.Wshow_arr = np.asarray(list(range(len(self.H))))[w]
+		else:
+			self.status['text'] = 'Status: For \'components to show\', please input indices with commas and colons enclosed by square brackets, or \'all\' for all components.'
+		self.H_pp = self.H[self.Wshow_arr,int(len(self.H.T)*self.st_p.get()/100):int(len(self.H.T)*self.en_p.get()/100)]
+		self.H_pp = self.H_pp+self.baseline.get()
+		self.W_pp = self.W[:,self.Wshow_arr]
+		self.make_keys()
 		self.H_to_Hp()
 		self.init_plots()
 		
 		# Colormap
-		self.cmap = jet(np.linspace(0,1,len(self.H_pp)))
+		cmaptmp = eval(self.cmapchoice.get())
+		self.cmap = cmaptmp(np.linspace(0,1,len(self.H_pp)))
 
 		# Update slider (Need to move the command)
 		if self.frameslider.get() > len(self.H_pp.T): # This (usually) occurs when the user crops the dataset
 			self.frameslider.set(1)
 		self.frameslider['to'] = int(len(self.H_pp.T)-1)
-		self.frameslider['command'] = self.refreshW_slider
+		
 
 		Hstd = self.H_pp.std()*3 # 3 Could be in an option json/yaml file
 		if self.offsetH.get():
-			tmpH = self.H_pp.T - repmat([w*Hstd for w in self.Wshow],len(self.H_pp.T),1)
+			tmpH = self.H_pp.T - repmat([w*Hstd for w in list(range(len(self.Wshow_arr)))],len(self.H_pp.T),1)
 		else:
 			tmpH = self.H_pp.T
 
@@ -193,6 +202,7 @@ class GUI(Tk):
 
 		if self.audio_format.get() == 'Stream':
 			self.H_p_plot = self.Hax2.imshow(self.H_pp,interpolation='none',cmap=plt.get_cmap('gray'))
+			self.H_p_plot.set_clim(0, np.max(self.H_pp))
 		else:
 			self.H_p_plot = self.Hax2.imshow(self.H_fp,interpolation='none',cmap=plt.get_cmap('gray'))
 
@@ -211,13 +221,20 @@ class GUI(Tk):
 		self.Hax1.spines['bottom'].set_visible(False)
 		self.Hax1.tick_params(axis='x',which='both',bottom=False, top=False, labelbottom=False, right=False)
 
+		if len(self.Wshow_arr) > 10:
+			yticks = np.arange(4,len(self.H_pp),5)
+			yticklabels = np.arange(5,len(self.H_pp)+1,5)
+		else:
+			yticks = np.arange(0,len(self.H_pp),1)
+			yticklabels = np.arange(1,len(self.H_pp)+1,1)
+
 		if self.offsetH.get():
-			self.Hax1.set(yticks=-np.arange(4,len(self.H_pp),5)*Hstd,yticklabels=np.arange(5,len(self.H_pp),5))
-		self.Hax2.set(yticks=np.arange(4,len(self.H_pp),5),yticklabels=np.arange(5,len(self.H_pp),5))
+			self.Hax1.set(yticks=-yticks*Hstd,yticklabels=yticklabels)
+		self.Hax2.set(yticks=yticks,yticklabels=yticklabels)
 
 		self.sc = 255/self.brightness.get()
-		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
-		self.imW = self.Wax2.imshow((self.W@self.cmap[:,:-1]*255/np.max(self.W)).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imWH = self.Wax1.imshow((self.W_pp@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imW = self.Wax2.imshow((self.W_pp@self.cmap[:,:-1]*255/np.max(self.W_pp)).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
 		
 		self.H_p_plot.axes.set_aspect('auto')
 		self.imW.axes.set_aspect('equal')
@@ -229,7 +246,7 @@ class GUI(Tk):
 	def refreshW_slider(self,event):
 		if hasattr(self,'imWH'):
 			self.imWH.remove()
-		self.imWH = self.Wax1.imshow((self.W@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
+		self.imWH = self.Wax1.imshow((self.W_pp@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
 		if hasattr(self,'H_vline'):
 			self.H_vline.remove()
 		self.H_vline, = self.Hax1.plot([],'k',linewidth=.5)
@@ -240,7 +257,7 @@ class GUI(Tk):
 
 	def H_to_Hp(self):
 		ns = int(1000*len(self.H_pp.T)/self.fr.get())
-		H = signal.resample(self.H_pp, ns, axis=1)
+		H = resample(self.H_pp, ns, axis=1)
 		Hb = H > self.threshold.get()
 		Hb = Hb * 1
 		Hb[:,0] = 0
@@ -261,7 +278,7 @@ class GUI(Tk):
 				self.nd['mag'].append(int(tmpmag * 127 / Hmax))
 				self.nd['note'].append(self.keys[i])
 
-	def makekeys(self):
+	def make_keys(self,value=[]):
 		scaledata = []
 		nnotes = len(self.H_pp)
 		with open(os.path.join(self.package_path,'scaledata.csv')) as csvfile:
@@ -308,9 +325,9 @@ class GUI(Tk):
 				fn = os.path.join(self.AE_path,str(self.keys[i])+'_5_2.ogg');
 				sound = Sound(file=fn)
 			self.imW.remove()
-			Wtmp = self.W[:,self.Wshow[i]]
-			cmaptmp = self.cmap[self.Wshow[i],:-1]
-			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.W)).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
+			Wtmp = self.W_pp[:,i]
+			cmaptmp = self.cmap[i,:-1]
+			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.W_pp)).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
 			self.canvas_W.draw()
 			self.update()
 			if self.audio_format.get()=='Stream':
@@ -366,7 +383,7 @@ class GUI(Tk):
 		H = np.zeros((len(t2),))
 		for n in range(len(self.H_fp)):
 			Htmp = self.H_fp[n,:]
-			Htmp[Htmp<self.baseline.get()] = 0
+			Htmp[Htmp<0] = 0
 			Htmp = interp1d(t1,Htmp)(t2)
 			H += np.sin(2*np.pi*freqs[self.keys[n]]*t2)*Htmp
 			self.status['text'] = 'Status: Writing audio: {} out of {} channels...'.format(n+1,len(self.H_fp))
@@ -380,7 +397,7 @@ class GUI(Tk):
 		fourcc = cv2.VideoWriter_fourcc(*'XVID')
 		out = cv2.VideoWriter(os.path.join(self.save_path.get(),self.file_out.get())+'.avi', fourcc, 20.0, tuple(self.W_shape[:-1]))
 		for i in range(len(self.H_fp.T)):
-			frame = (self.W@np.diag(self.H_pp[:,i])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8')
+			frame = (self.W_pp@np.diag(self.H_pp[:,i])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8')
 			out.write(frame)
 			self.status['text'] = 'Status: writing video file, {} out of {} frames written'.format(i,len(self.H_fp.T))
 			self.update()
@@ -413,12 +430,13 @@ class GUI(Tk):
 		self.filterH=init_entry(0)
 		self.brightness=init_entry(0)
 		self.threshold=init_entry(0)
-		self.oct_add = init_entry('0')
+		self.oct_add = init_entry('2')
 		self.scale_type = init_entry('Chromatic (12/oct)')
 		self.key = init_entry('C')
 		self.audio_format = init_entry('Stream')
+		self.Wshow=init_entry('all')
 		self.status = init_entry('Status: Welcome to pyanthem!')
-
+		self.cmapchoice = init_entry('jet')
 		# Labels
 
 		Label(text='').grid(row=0,column=0)
@@ -436,14 +454,14 @@ class GUI(Tk):
 		Label(text='Baseline').grid(row=4, column=3, sticky='E')
 		Label(text='HP filter').grid(row=5, column=3, sticky='E')
 		Label(text='Max brightness').grid(row=6, column=3, sticky='E')
-		Label(text='Thresholdold').grid(row=1, column=5, sticky='E')
+		Label(text='Colormap').grid(row=7, column=3, sticky='E')
+		Label(text='Threshold').grid(row=1, column=5, sticky='E')
 		Label(text='Octave').grid(row=2, column=5, sticky='E')
 		Label(text='Scale Type').grid(row=3, column=5, sticky='E')
 		Label(text='Key').grid(row=4, column=5, sticky='E')
 		Label(text='Audio format').grid(row=5, column=5, sticky='E')
 		self.status = Message(text='Status: welcome to pyathem!',aspect=1000)
 		self.status.grid(row=8, column=1,columnspan=4)
-		#Label(text='Components to show').grid(row=108, column=5)
 
 		# Entries
 		Entry(textvariable=self.file_out).grid(row=4, column=1,columnspan=2,sticky='W')
@@ -469,6 +487,10 @@ class GUI(Tk):
 		'Maj. 7th (4/oct)','Min. 7th (4/oct)','Aug. 7th (4/oct)',
 		'Dim. 7th (4/oct)','Maj. 7/9 (5/oct)','Min. 7/9 (5/oct)']
 		self.key_opts = ['C','C#/D♭','D','D#/E♭','E','F','F#/G♭','G','G#/A♭','A','A#/B♭','B']
+		self.cmaps = sorted(['viridis', 'plasma', 'inferno', 'magma', 'cividis','binary', 
+		'bone', 'pink','spring', 'summer', 'autumn', 'winter', 'cool','hot','copper','Spectral', 
+		'coolwarm', 'bwr', 'seismic','twilight', 'hsv', 'Paired', 'Accent','Dark2', 'prism', 'ocean', 
+		'terrain', 'CMRmap','brg', 'rainbow', 'jet'],key=lambda s: s.lower())
 		if self.AE_run:
 			self.audio_format_opts = ['Stream','Piano','MIDI']
 		else:
@@ -476,10 +498,11 @@ class GUI(Tk):
 			self.status['text'] = 'Status: AE engine not downloaded. Please do using AE_download() to enable "Piano" format'
 
 		# Option Menus
-		OptionMenu(self,self.oct_add,*self.oct_add_opts).grid(row=2, column=6, sticky='W')
-		OptionMenu(self,self.scale_type,*self.scale_type_opts).grid(row=3, column=6, sticky='W')
-		OptionMenu(self,self.key,*self.key_opts).grid(row=4, column=6, sticky='W')
-		OptionMenu(self,self.audio_format,*self.audio_format_opts).grid(row=5, column=6, sticky='W')
+		OptionMenu(self,self.oct_add,*self.oct_add_opts,command=self.make_keys).grid(row=2, column=6, sticky='W')
+		OptionMenu(self,self.scale_type,*self.scale_type_opts,command=self.make_keys).grid(row=3, column=6, sticky='W')
+		OptionMenu(self,self.key,*self.key_opts,command=self.make_keys).grid(row=4, column=6, sticky='W')
+		OptionMenu(self,self.audio_format,*self.audio_format_opts,command=self.make_keys).grid(row=5, column=6, sticky='W')
+		OptionMenu(self,self.cmapchoice,*self.cmaps).grid(row=7, column=4, sticky='WE')
 
 		# Menu bar
 		menubar = Menu(self)
@@ -517,10 +540,11 @@ class GUI(Tk):
 		
 		# frameslider var 
 		self.frameslider = Scale(self, from_=0, to=1, orient=HORIZONTAL)
+		self.frameslider['command'] = self.refreshW_slider
 
 	def init_plots(self):
 		# H
-		self.figH = plt.Figure(figsize=(6,6), dpi=100)
+		self.figH = plt.Figure(figsize=(7,6), dpi=100, tight_layout=True)
 		self.Hax1 = self.figH.add_subplot(211)
 		self.Hax2 = self.figH.add_subplot(212)
 		self.Hax1.set_title('Raw Temporal Data (H)')
@@ -530,12 +554,13 @@ class GUI(Tk):
 		self.canvas_H.get_tk_widget().grid(row=0,column=7,rowspan=29,columnspan=10)
 
 		# Checkbox
-		Checkbutton(self, text="Offset H",bg='white',command=self.refreshplots,variable=self.offsetH).grid(row=8,rowspan=3,column=16)
+		Checkbutton(self, text="Offset H",bg='white',command=self.refreshplots,variable=self.offsetH).grid(row=7,rowspan=4,column=16)
 
 		# W
-		self.figW = plt.Figure(figsize=(6,3), dpi=100)
+		self.figW = plt.Figure(figsize=(6,3), dpi=100, constrained_layout=True)
 		self.Wax1 = self.figW.add_subplot(121)
 		self.Wax2 = self.figW.add_subplot(122)
+
 		self.Wax1.set_title('Output(H x W)')
 		self.Wax2.set_title('Spatial Components (W)')
 		self.Wax1.axis('off')
@@ -546,6 +571,12 @@ class GUI(Tk):
 		
 		# Frameslider
 		self.frameslider.grid(row=29, column=1, columnspan=3, sticky='EW')
+
+		# Wshow
+		Label(text='Components to show:').grid(row=29, column=3, columnspan=3, sticky='E')
+		Entry(textvariable=self.Wshow,width=20,justify='center').grid(row=29, column=5, columnspan=2,sticky='E')
+		
+
 if __name__ == "__main__":
 	MainWindow = GUI()
 	MainWindow.mainloop()
