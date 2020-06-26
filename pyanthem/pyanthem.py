@@ -1,3 +1,4 @@
+# BOKEH BRANCH!
 import os, random, sys, cv2, time, csv, h5py
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 from tkinter import *
@@ -22,7 +23,6 @@ from soundfile import read
 from midiutil import MIDIFile
 from git import Repo
 from sklearn.cluster import KMeans
-
 
 def AE_download():
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
