@@ -23,15 +23,16 @@ from soundfile import read
 from midiutil import MIDIFile
 from git import Repo
 from sklearn.cluster import KMeans
+from bokeh.plotting import figure, output_file, show
 
 def AE_download():
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
 		print('Cloning the audio engine to the pyanthem package directory...')
 		Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
-		print('Audio engine downloaded to {}'.format(AE_path))
+		print(f'Audio engine downloaded to {AE_path}')
 	else:
-		print('Audio engine is already present in {}. If you want to uninstall, you must manually delete the AE folder.'.format(AE_path))
+		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
 
 def init_entry(fn):
 	if isinstance(fn, str):
@@ -62,7 +63,7 @@ def process_raw(k=[],fr=[]):
 	print('Performing k-means...',end='')
 	if k == []:
 		k = int(len(data)**.25) # Default k is the 4th root of the number of samples per frame (for 256x256, this would be 16)
-		print('No k given. Defaulting to {}...',end='').format(str(k))
+		print(f'No k given. Defaulting to {k}...',end='')
 	idx_nn = KMeans(n_clusters=k, random_state=0).fit(data_nn).labels_
 	idx = np.zeros((len(data),))
 	idx[nanidx==False] = idx_nn
@@ -99,7 +100,7 @@ def process_raw(k=[],fr=[]):
 		df['fr'] = fr
 	fn = file.replace('.mat','_decomp.mat')
 	savemat(fn,df)
-	print('Decomposed data file saved to {}'.format(fn))
+	print(f'Decomposed data file saved to {fn}')
 
 def play_for(sample_wave, ms):
 	sound = make_sound(sample_wave)
@@ -133,6 +134,8 @@ class GUI(Tk):
 			self.AE_run = True
 		else:
 			self.AE_run = False
+
+		self.geometry('250x150+300+300')
 		self.initGUI()
 	
 	def donothing(self):
@@ -365,12 +368,12 @@ class GUI(Tk):
 			#raw[-int(fs*r):] *= r_mat
 			inds = range(int(self.nd['st'][i][0]*fs),int(self.nd['st'][i][0]*fs)+len(raw))
 			raws[inds,:] += raw
-			self.status['text'] = 'Status: writing audio file, {} out of {} notes written'.format(i+1,len(self.nd['st']))
+			self.status['text'] = f'Status: writing audio file, {i+1} out of {len(self.nd['st'])} notes written'
 			self.update()
 		raws = raws[:-fs*(ext-1),:] # Crop wav
 		raws = np.int16(raws/np.max(np.abs(raws)) * 32767)
 		wavwrite(os.path.join(self.save_path.get(),self.file_out.get())+'.wav',fs,raws)
-		self.status['text'] = 'Status: audio file written to {}'.format(self.save_path.get())
+		self.status['text'] = f'Status: audio file written to {self.save_path.get()}'
 
 	def neuralstream(self):
 		self.status['text'] = 'Writing audio file...'
@@ -386,12 +389,12 @@ class GUI(Tk):
 			Htmp[Htmp<0] = 0
 			Htmp = interp1d(t1,Htmp)(t2)
 			H += np.sin(2*np.pi*freqs[self.keys[n]]*t2)*Htmp
-			self.status['text'] = 'Status: Writing audio: {} out of {} channels...'.format(n+1,len(self.H_fp))
+			self.status['text'] = f'Status: Writing audio: {n+1} out of {len(self.H_fp)} channels...'
 			self.update()
 		wav = np.hstack((H[:,None],H[:,None]))
 		wav = np.int16(wav/np.max(np.abs(wav)) * 32767)
 		wavwrite(os.path.join(self.save_path.get(),self.file_out.get())+'.wav',fs,wav)
-		self.status['text'] = 'Status: audio file written to {}'.format(self.save_path.get())
+		self.status['text'] = f'Status: audio file written to {self.save_path.get()}'
 
 	def exportavi(self):
 		fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -399,10 +402,10 @@ class GUI(Tk):
 		for i in range(len(self.H_fp.T)):
 			frame = (self.W_pp@np.diag(self.H_pp[:,i])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8')
 			out.write(frame)
-			self.status['text'] = 'Status: writing video file, {} out of {} frames written'.format(i,len(self.H_fp.T))
+			self.status['text'] = f'Status: writing video file, {i} out of {len(self.H_fp.T)} frames written'
 			self.update()
 		out.release()
-		self.status['text'] = 'Status: video file written to {}'.format(self.save_path.get())
+		self.status['text'] = f'Status: video file written to {self.save_path.get()}'
 	
 	def combineAV(self):
 		import moviepy.editor as mpe # Weird error when putting this in the main imports, so it goes here.
@@ -413,7 +416,7 @@ class GUI(Tk):
 		final_clip.write_videofile(fn+'_AV.avi',fps=self.fr.get(),codec='mpeg4')
 		os.remove(fn+'.avi')
 		os.remove(fn+'.wav')
-		self.status['text'] = 'Status: video file w/ audio written to {}'.format(self.savepath.get())
+		self.status['text'] = f'Status: video file w/ audio written to {self.savepath.get()}'
 
 	def editsave_path(self):
 		self.save_path.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.save_path.get()))
