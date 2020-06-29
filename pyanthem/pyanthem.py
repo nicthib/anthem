@@ -1,8 +1,9 @@
 import os, random, sys, cv2, time, csv, pickle
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-from tkinter import *
+from tkinter import StringVar, DoubleVar, Tk, Label, Entry, Button, OptionMenu, Checkbutton, Message, Menu, IntVar, Scale, HORIZONTAL
 from tkinter.ttk import Progressbar, Separator, Combobox
 from tkinter import filedialog as fd 
+import tkinter.font as font
 from scipy.io import loadmat, savemat, whosmat
 from scipy.io.wavfile import write as wavwrite
 from scipy.optimize import nnls
@@ -28,8 +29,9 @@ def AE_download():
 		print('Cloning the audio engine to the pyanthem package directory...')
 		try:
 			Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
-		except: # put exception type here
 			print(f'Audio engine downloaded to {AE_path}')
+		except: # put exception type here
+			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
 		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
 
@@ -127,6 +129,7 @@ class GUI(Tk):
 		Tk.__init__(self)
 		self.tk.call('tk', 'scaling', 2.0)
 		self.package_path = os.path.split(os.path.realpath(__file__))[0]
+		self.data_is_loaded = 0
 		if __name__ == "__main__":
 			self.AE_path = r'C:\Users\dnt21\AppData\Local\Programs\Python\Python37-32\Lib\site-packages\pyanthem\AE'
 		else:
@@ -135,12 +138,13 @@ class GUI(Tk):
 			self.AE_run = True
 		else:
 			self.AE_run = False
+		self.default_font=font.nametofont("TkDefaultFont")
 		self.initGUI()
 	
 	def loadfrommat(self):
 		inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
-		if not inputfile:
-			return None, None, None
+		if len(inputfile) <= 1:
+			return
 		try:
 			dh = loadmat(inputfile)
 			self.H, self.W = dh['H'], dh['W']
@@ -151,16 +155,21 @@ class GUI(Tk):
 		self.W_shape = self.W.shape
 		self.W = self.W.reshape(self.W.shape[0]*self.W.shape[1],self.W.shape[2])
 		self.file_in.set(os.path.splitext(os.path.split(inputfile)[1])[0])
-		self.file_out.set(self.file_in.get()+'_proc')
+		self.file_out.set(self.file_in.get())
 		self.save_path.set(os.path.split(inputfile)[0])
 
 		# Set param defaults
 		self.brightness.set(f'{float(f"{np.max(self.H):.3g}"):g}')
 		self.threshold.set(f'{float(f"{np.mean(self.H):.3g}"):g}')
 		self.Wshow_arr = list(range(len(self.H)))
+		self.data_is_loaded = 1
+		self.status['text'] = 'Status: File load successful!'
 		self.refreshplots()
 
 	def refreshplots(self):
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
 		if self.Wshow.get() == 'all':
 			self.Wshow_arr = list(range(len(self.H)))
 		elif re.match('^\[[0-9,: ]*\]$',self.Wshow.get()) is not None:
@@ -198,8 +207,9 @@ class GUI(Tk):
 			j.set_color(self.cmap[i])
 		if not self.offsetH.get():
 			thresh_line = self.Hax1.plot(np.ones((len(self.H_pp.T,)))*self.threshold.get(),linestyle='dashed',color='0',linewidth=1)
-			baseline_line = self.Hax1.plot(np.ones((len(self.H_pp.T,)))*self.baseline.get(),linestyle='dashed',color='.5',linewidth=1)
-			self.legend = self.Hax1.legend((thresh_line[0],baseline_line[0]), ('Threshold','Baseline'))
+			zero_line = self.Hax1.plot(np.zeros((len(self.H_pp.T,))),linestyle='dashed',color='.5',linewidth=1)
+			self.legend = self.Hax1.legend((thresh_line[0],), ('Threshold',))
+			#self.legend = self.Hax1.legend((thresh_line[0],zero_line[0]), ('Threshold','Baseline'))
 
 		if self.audio_format.get() == 'Stream':
 			self.H_p_plot = self.Hax2.imshow(self.H_pp,interpolation='none',cmap=plt.get_cmap('gray'))
@@ -245,6 +255,9 @@ class GUI(Tk):
 		self.refreshW_slider([])
 
 	def refreshW_slider(self,event):
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
 		if hasattr(self,'imWH'):
 			self.imWH.remove()
 		self.imWH = self.Wax1.imshow((self.W_pp@np.diag(self.H_pp[:,self.frameslider.get()])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8'))
@@ -256,7 +269,8 @@ class GUI(Tk):
 		self.canvas_H.draw()
 
 	def H_to_Hp(self):
-		ns = int(1000*len(self.H_pp.T)/self.fr.get())
+		true_fr = self.fr.get()*self.speed.get()/100
+		ns = int(len(self.H_pp.T)*1000/true_fr)
 		H = resample(self.H_pp, ns, axis=1)
 		Hb = H > self.threshold.get()
 		Hb = Hb * 1
@@ -274,7 +288,7 @@ class GUI(Tk):
 			self.nd['en'].extend([x/1000 for x in en])
 			for j in range(len(st)):
 				tmpmag = np.max(H[i,st[j][0]:en[j][0]])
-				self.H_fp[i,int(st[j][0]*self.fr.get()/1000):int(en[j][0]*self.fr.get()/1000)] = tmpmag
+				self.H_fp[i,int(st[j][0]*true_fr/1000):int(en[j][0]*true_fr/1000)] = tmpmag
 				self.nd['mag'].append(int(tmpmag * 127 / Hmax))
 				self.nd['note'].append(self.keys[i])
 
@@ -293,26 +307,10 @@ class GUI(Tk):
 		keys = keys[:nnotes] # Crop to nnotes to avoid confusion
 		self.keys = [k+int(self.oct_add.get())*12 for k in keys]
 
-	def htoaudio(self):
-		# Make MIDI key pattern
-		if self.audio_format.get() == 'MIDI':
-			fn = os.path.join(self.save_path.get(),self.file_out.get())+'.mid'
-			print(fn)
-			MIDI = MIDIFile(1)  # One track
-			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
-			for j in range(len(self.nd['note'])):
-				# addNote(track, channel, pitch, time + i, duration, volume)
-				MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
-			with open(fn, 'wb') as mid:
-				MIDI.writeFile(mid)
-		elif self.audio_format.get() == 'Piano':
-			self.synth()
-		elif self.audio_format.get() == 'Stream':
-			self.neuralstream()
-	
 	def preview_notes(self):
-		if not self.AE_run:
-			self.status['text'] = 'Status: AE engine not downloaded. Please do so using the function AE_download() to preview piano notes.'
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
 		if get_init() is None: # Checks if pygame has initialized audio engine. Only needs to be run once per instance
 			pre_init(44100, -16, 2, 1024)
 			init()
@@ -337,8 +335,31 @@ class GUI(Tk):
 				time.sleep(.5)
 		self.refreshplots()
 
+	def htoaudio(self):
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
+		self.make_keys() # Make MIDI key pattern
+		if self.audio_format.get() == 'MIDI':
+			fn = os.path.join(self.save_path.get(),self.file_out.get())+'.mid'
+			print(fn)
+			MIDI = MIDIFile(1)  # One track
+			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
+			for j in range(len(self.nd['note'])):
+				# addNote(track, channel, pitch, time + i, duration, volume)
+				MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
+			with open(fn, 'wb') as mid:
+				MIDI.writeFile(mid)
+		elif self.audio_format.get() == 'Piano':
+			self.synth()
+		elif self.audio_format.get() == 'Stream':
+			self.neuralstream()
+	
 	def synth(self):
-		print('Keys are ' + str(self.nd['note']))
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
+		self.make_keys()
 		fs = 44100
 		r = .5 # release for note
 		#r_mat = np.linspace(1, 0, num=int(fs*r))
@@ -374,11 +395,15 @@ class GUI(Tk):
 		self.status['text'] = f'Status: audio file written to {self.save_path.get()}'
 
 	def neuralstream(self):
-		self.status['text'] = 'Writing audio file...'
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
+		self.make_keys()
 		C0 = 16.352
 		fs = 44100
 		freqs = [C0*2**(i/12) for i in range(128)]
-		ns = int(fs*len(self.H_fp.T)/self.fr.get())
+		true_fr = (self.fr.get()*self.speed.get())/100
+		ns = int(fs*len(self.H_fp.T)/true_fr)
 		t1 = np.linspace(0,len(self.H_fp.T)/self.fr.get(),len(self.H_fp.T))
 		t2 = np.linspace(0,len(self.H_fp.T)/self.fr.get(),ns)
 		H = np.zeros((len(t2),))
@@ -395,11 +420,13 @@ class GUI(Tk):
 		self.status['text'] = f'Status: audio file written to {self.save_path.get()}'
 
 	def exportavi(self):
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
 		fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-		out = cv2.VideoWriter(os.path.join(self.save_path.get(),self.file_out.get())+'.mp4', fourcc, self.fr.get(), tuple(self.W_shape[::-1][1:]),True)
+		out = cv2.VideoWriter(os.path.join(self.save_path.get(),self.file_out.get())+'.mp4', fourcc, self.fr.get()*self.speed.get()/100, tuple(self.W_shape[::-1][1:]),True)
 		for i in range(len(self.H_fp.T)):
 			frame = (self.W_pp@np.diag(self.H_pp[:,i])@self.cmap[:,:-1]*self.sc).reshape(self.W_shape[0],self.W_shape[1],3).clip(min=0,max=255).astype('uint8')
-			print(frame.shape)
 			out.write(frame)
 			self.status['text'] = f'Status: writing video file, {i} out of {len(self.H_fp.T)} frames written'
 			self.update()
@@ -407,16 +434,20 @@ class GUI(Tk):
 		self.status['text'] = f'Status: video file written to {self.save_path.get()}'
 	
 	def combineAV(self):
+		if not self.data_is_loaded:
+			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			return
 		fn = os.path.join(self.save_path.get(),self.file_out.get())
 		cmd = 'ffmpeg -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
 		os.system(cmd)
 		self.status['text'] = f'Status: video file w/ audio written to {self.save_path.get()}'
 
 	def dump_config(self):
+		if not self.data_is_loaded:
+			return
 		fileout = os.path.join(self.save_path.get(),self.file_out.get())+'_cfg.p'
 		fns = ('fr','st_p','en_p','baseline','brightness','threshold','oct_add','scale_type','key','audio_format','Wshow','cmapchoice')
 		cfg = {k: getattr(self,k).get() for k in fns}
-		print(f'dumping file {fileout}...')
 		pickle.dump(cfg,open(fileout, "wb"))
 	
 	def load_config(self):
@@ -425,10 +456,9 @@ class GUI(Tk):
 			cfg = pickle.load(f)
 		for key in cfg:
 			getattr(self,key).set(cfg[key])
-		self.update()
 		self.refreshplots()
 
-	def editsave_path(self):
+	def edit_save_path(self):
 		self.save_path.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.save_path.get()))
 
 	def initGUI(self):
@@ -439,7 +469,8 @@ class GUI(Tk):
 		self.file_in=init_entry('')
 		self.file_out=init_entry('')
 		self.save_path=init_entry('')
-		self.fr=init_entry(10)
+		self.speed=init_entry(100)
+		self.fr=init_entry(0)
 		self.st_p=init_entry(0)
 		self.en_p=init_entry(100)
 		self.baseline=init_entry(0)
@@ -461,7 +492,7 @@ class GUI(Tk):
 		Label(text='Input Filename').grid(row=1, column=1,columnspan=2,sticky='W')
 		Label(text='Output Filename').grid(row=3, column=1,columnspan=2,sticky='W')
 		Label(text='Save Path').grid(row=5, column=1,columnspan=1,sticky='W')
-		Label(text='Framerate').grid(row=1, column=3, sticky='E')
+		Label(text='Playback speed (%)').grid(row=1, column=3, sticky='E')
 		Label(text='Start (%)').grid(row=2, column=3, sticky='E')
 		Label(text='End (%)').grid(row=3, column=3, sticky='E')
 		Label(text='Baseline').grid(row=4, column=3, sticky='E')
@@ -475,13 +506,14 @@ class GUI(Tk):
 
 		# Messages
 		self.status = Message(text='Status: welcome to pyathem!',aspect=1000)
-		self.status.grid(row=8, column=1,columnspan=4)
+		self.status.grid(row=8, column=1,columnspan=4,sticky='W')
+		self.status.grid_propagate(0)
 
 		# Entries
 		Entry(textvariable=self.file_in).grid(row=2, column=1,columnspan=2,sticky='W')
 		Entry(textvariable=self.file_out).grid(row=4, column=1,columnspan=2,sticky='W')
 		Entry(textvariable=self.save_path,width=17).grid(row=6, column=1,columnspan=2,sticky='EW')
-		Entry(textvariable=self.fr,width=7).grid(row=1, column=4, sticky='W')
+		Entry(textvariable=self.speed,width=7).grid(row=1, column=4, sticky='W')
 		Entry(textvariable=self.st_p,width=7).grid(row=2, column=4, sticky='W')
 		Entry(textvariable=self.en_p,width=7).grid(row=3, column=4, sticky='W')
 		Entry(textvariable=self.baseline,width=7).grid(row=4, column=4, sticky='W')
@@ -489,7 +521,7 @@ class GUI(Tk):
 		Entry(textvariable=self.threshold,width=7).grid(row=1, column=6, sticky='W')
 
 		# Buttons
-		Button(text='Edit',command=self.editsave_path,width=5).grid(row=5, column=2)
+		Button(text='Edit',command=self.edit_save_path,width=5).grid(row=5, column=2)
 		Button(text='Preview Notes',width=15,command=self.preview_notes).grid(row=6, column=5,columnspan=2)
 		Button(text='Update',width=15,command=self.refreshplots).grid(row=8, column=5,columnspan=2)
 
@@ -512,16 +544,24 @@ class GUI(Tk):
 			self.status['text'] = 'Status: AE engine not downloaded. Please do so using AE_download() to enable "Piano" format'
 
 		# Option Menus
-		OptionMenu(self,self.oct_add,*self.oct_add_opts,command=self.make_keys).grid(row=2, column=6, sticky='W')
-		OptionMenu(self,self.scale_type,*self.scale_type_opts,command=self.make_keys).grid(row=3, column=6, sticky='W')
-		OptionMenu(self,self.key,*self.key_opts,command=self.make_keys).grid(row=4, column=6, sticky='W')
-		OptionMenu(self,self.audio_format,*self.audio_format_opts,command=self.make_keys).grid(row=5, column=6, sticky='W')
+		oct_add_menu = OptionMenu(self,self.oct_add,*self.oct_add_opts)
+		oct_add_menu.config(width=7)
+		oct_add_menu.grid(row=2, column=6, sticky='W')
+		scale_type_menu=OptionMenu(self,self.scale_type,*self.scale_type_opts)
+		scale_type_menu.config(width=7)
+		scale_type_menu.config(font=(self.default_font,(8)))
+		scale_type_menu.grid(row=3, column=6, sticky='EW')
+		key_menu=OptionMenu(self,self.key,*self.key_opts)
+		key_menu.config(width=7)
+		key_menu.grid(row=4, column=6, sticky='W')
+		audio_format_menu=OptionMenu(self,self.audio_format,*self.audio_format_opts)
+		audio_format_menu.config(width=7)
+		audio_format_menu.grid(row=5, column=6, sticky='W')
 		
 		# Combo box
 		self.cmapchooser = Combobox(self,textvariable=self.cmapchoice,width=7)
 		self.cmapchooser['values'] = self.cmaps
 		#self.cmapchooser['state'] = 'readonly'
-
 		self.cmapchooser.grid(row=6, column=4, sticky='WE')
 		self.cmapchooser.current()
 
@@ -534,7 +574,7 @@ class GUI(Tk):
 
 		savemenu=Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=lambda:[self.htoaudio(),self.dump_config()])
-		savemenu.add_command(label="Video", command=self.exportavi)
+		savemenu.add_command(label="Video", command=lambda:[self.exportavi(),self.dump_config()])
 		savemenu.add_command(label="Combine A/V", command=self.combineAV)
 
 		menubar.add_cascade(label="File", menu=filemenu)
@@ -559,7 +599,7 @@ class GUI(Tk):
 
 	def init_plots(self):
 		# H
-		self.figH = plt.Figure(figsize=(5,6), dpi=100, tight_layout=True)
+		self.figH = plt.Figure(figsize=(6,6), dpi=100, tight_layout=True)
 		self.Hax1 = self.figH.add_subplot(211)
 		self.Hax2 = self.figH.add_subplot(212)
 		self.Hax1.set_title('Raw Temporal Data (H)')
@@ -572,7 +612,7 @@ class GUI(Tk):
 		Checkbutton(self, text="Offset H",bg='white',command=self.refreshplots,variable=self.offsetH).grid(row=0,rowspan=1,column=16)
 
 		# W
-		self.figW = plt.Figure(figsize=(6,2), dpi=100, constrained_layout=True)
+		self.figW = plt.Figure(figsize=(6,3), dpi=100, constrained_layout=True)
 		self.Wax1 = self.figW.add_subplot(121)
 		self.Wax2 = self.figW.add_subplot(122)
 		self.Wax1.set_title('Output(H x W)')
