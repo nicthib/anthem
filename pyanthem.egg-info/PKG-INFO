@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: pyanthem
-Version: 0.30
-Summary: py-anthem
-Home-page: https://github.com/nicthib/neuroauvi
+Version: 0.32
+Summary: pyanthem - a neuroimaging audiovisualiation tool.
+Home-page: https://github.com/nicthib/pyanthem
 Author: Nic Thibodeaux
 Author-email: dnt2111@columbia.edu
 License: UNKNOWN

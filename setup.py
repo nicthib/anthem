@@ -5,16 +5,18 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyanthem",
-    version="0.30",
+    version="0.32",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
-    description="py-anthem",
+    description="pyanthem - a neuroimaging audiovisualiation tool.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/nicthib/neuroauvi",
+    url="https://github.com/nicthib/pyanthem",
     packages=setuptools.find_packages(),
-    setup_requires=['numpy'],
-    install_requires=['scipy',
+    setup_requires=[
+        'numpy',
+        'scipy'],
+    install_requires=[
         'soundfile',
         'midiutil',
         'GitPython',
