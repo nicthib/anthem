@@ -1,1 +1,2 @@
 include pyanthem/scaledata.csv
+inlcude pyanthem/main.py

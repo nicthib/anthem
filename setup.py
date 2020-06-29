@@ -4,37 +4,8 @@ with open("README.md", "r") as fh:
 	long_description = fh.read()
 
 setuptools.setup(
-<<<<<<< HEAD
-	name="pyanthem",
-	version="0.26",
-	author="Nic Thibodeaux",
-	author_email="dnt2111@columbia.edu",
-	description="py-anthem",
-	long_description=long_description,
-	long_description_content_type="text/markdown",
-	url="https://github.com/nicthib/neuroauvi",
-	packages=setuptools.find_packages(),
-	setup_requires=['numpy'],
-	install_requires=['scipy',
-		'soundfile',
-		'midiutil',
-		'GitPython',
-		'matplotlib',
-		'pygame',
-		'opencv-python',
-		'sklearn',
-		'h5py'
-	  ],
-	include_package_data=True,
-	classifiers=[
-		"Programming Language :: Python :: 3",
-		"License :: OSI Approved :: MIT License",
-		"Operating System :: OS Independent",
-	],
-	python_requires='>=3.6',
-=======
     name="pyanthem",
-    version="0.27",
+    version="0.30",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="py-anthem",
@@ -51,7 +22,6 @@ setuptools.setup(
         'pygame',
         'opencv-python',
         'sklearn',
-        'h5py'
       ],
     include_package_data=True,
     classifiers=[
@@ -60,7 +30,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
->>>>>>> cc1f882f6d8ce82db728cf9756b13a73809636c9
 )
 
 # For MANIFEST:
