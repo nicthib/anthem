@@ -1,18 +1,15 @@
 MAKE A LOGO
-<a href="http://fvcproductions.com"><img src="https://avatars1.githubusercontent.com/u/4284691?v=3&s=200" title="FVCproductions" alt="FVCproductions"></a>
 
 # pyanthem
 
 > a neuroimaging audiovisualization tool to make your data more interesting!
 
 MAKE A GRAPHIC
-[![INSERT YOUR GRAPHIC HERE](http://i.imgur.com/dt8AUb6.png)]()
+[![INSERT YOUR GRAPHIC HERE]()]()
 
 ---
 
 ## Table of Contents
-
-> If your `README` has a lot of info, section headers might be nice.
 
 - [Installation](#requirements) 
 - [Installation](#installation)
