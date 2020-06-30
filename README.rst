@@ -78,10 +78,10 @@ Team
 .. |niclogo| image:: https://avatars1.githubusercontent.com/u/34455769?v=3&s=200
 
 .. csv-table::
-   :header: Nic Thibodeaux, Other person
+   :header: Nic Thibodeaux
 
-   |niclogo| , |niclogo|
-    `<http://github.com/nicthib>`_,`<http://github.com/nicthib>`_   
+   |niclogo|
+    `<http://github.com/nicthib>`
 FAQ
 ---
 
