@@ -21,21 +21,25 @@ pyanthem boasts a variety of features:
 
 Requirements
 ------------
-Python 3:
+***Python 3:***
+
    Currently, pyanthem is tested to work on [Python][1] 3.6+. This will be 
    updated as more versions are tested.
 
-pip:
+***pip:***
+
    pip is needed for the installation of the pyanthem module and its
    dependencies.  Most python versions will have pip installed already, 
    see the  [pip installation][2] page for instructions if you do not 
    have pip.
 
-git (optional):
+***git (optional):***
+
   [git][3] allows pyanthem to download external audio files quickly and 
   easily.
 
-ffmpeg (optional):
+***ffmpeg (optional):***
+
    [ffmpeg][4] enables merging video and audio files into a single output.
 
 [1]: https://www.python.org/
