@@ -75,13 +75,12 @@ Step 3
 Team
 ----
 
-.. |Nic| image:: https://avatars1.githubusercontent.com/u/34455769?v=3&s=200
+.. |niclogo| image:: https://avatars1.githubusercontent.com/u/34455769?v=3&s=200
 
 .. csv-table::
-    :header: Nic Thibodeaux
+    :header: Nic Thibodeaux, Other person
 
-    .. image:: https://avatars1.githubusercontent.com/u/34455769?v=3&s=200
-    `<http://github.com/nicthib>`_
+    |niclogo| , |niclogo|
 
 FAQ
 ---
