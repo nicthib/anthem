@@ -18,19 +18,19 @@
 ---
 
 Python 3:
-   Currently, pyanthem is tested to work on Python_ 3.6+. This will be updated as more versions are tested
+   Currently, pyanthem is tested to work on [Python][1] 3.6+. This will be updated as more versions are tested
 
 pip:
    pip is needed for the installation of the pyanthem module and its
    dependencies.  Most python versions will have pip installed already, 
-   see the  `pip installation`_ page for instructions.
+   see the  [pip installation][2] page for instructions.
 
 git (optional):
-  git_ allows pyanthem to download external audio files quickly and easily.
+  [git][3] allows pyanthem to download external audio files quickly and easily.
 
-.. _Python: https://www.python.org/
-.. _pip installation: https://pip.pypa.io/en/latest/installing/
-.. _git: https://git-scm.com/
+[1]: https://www.python.org/
+[2]: https://pip.pypa.io/en/latest/installing/
+[3]: https://git-scm.com/
 
 ---
 
