@@ -1,6 +1,4 @@
-# pyanthem
-
-> a neuroimaging audiovisualization tool to make your data more interesting!
+# pyanthem: a neuroimaging audiovisualization tool to make your data more interesting
 
 ## Table of Contents
 
@@ -13,9 +11,7 @@
 - [Support](#support)
 - [License](#license)
 
----
 ## Requirements
----
 
 Python 3:
    Currently, pyanthem is tested to work on [Python][1] 3.6+. This will be updated as more versions are tested
@@ -32,8 +28,6 @@ git (optional):
 [2]: https://pip.pypa.io/en/latest/installing/
 [3]: https://git-scm.com/
 
----
-
 ## Installation
 
 1) `pip install pyanthem`
@@ -43,8 +37,6 @@ git (optional):
 import pyanthem
 pyanthem.AE_download()
 ```
-
----
 
 ## Contributing
 
@@ -66,8 +58,6 @@ pyanthem.AE_download()
 
 - 🔃 Create a new pull request using <a href="https://github.com/nicthib/pyanthem/compare/" target="_blank">`https://github.com/nicthib/pyanthem/compare/`</a>.
 
----
-
 ## Team
 
 | **Nic Thibodeaux** |
@@ -75,20 +65,14 @@ pyanthem.AE_download()
 | ![](https://avatars1.githubusercontent.com/u/34455769?v=3&s=200)|
 | <a href="http://github.com/nicthib" target="_blank">`github.com/nicthib`</a> |
 
----
-
 ## FAQ
 
 - **How do I do *specifically* so and so?**
     - No problem! Just do this.
 
----
-
 ## Support
 
 - Twitter at <a href="http://twitter.com/nicthibs" target="_blank">`@nicthibs`</a>
-
----
 
 ## License
 
