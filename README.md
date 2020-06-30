@@ -8,7 +8,8 @@ pyanthem boasts a variety of features:
    3) A broad variety of video and audio parameters
    4) Command-line reproduction via config files
 
-## Table of Contents
+Table of Contents
+------------
 
 - [Requirements](#requirements) 
 - [Installation](#installation)
@@ -47,27 +48,32 @@ Requirements
 [3]: https://git-scm.com/
 [4]: https://ffmpeg.org/
 
-## Installation
-
+Installation
+------------
 Using pip:
 
-   ``
+   ``python
    pip install pyanthem
    ``
    
    Note: installation could take some time to add the required packages, 
-   depending on what is already in your environment. To install the 
-   optional "Piano" audio engine, import and then use the download command:
+   depending on what is already in your environment. 
    
-   ```
+   To install the optional "Piano" audio engine, import and then use the download command:
+   
+   ```python
    import pyanthem
    pyanthem.AE_download()
    ```
    Note: This requires git. If you do not have git, you will need to 
    follow the alternate installation guide in the [FAQ](#faq).
    
-## Contributing
+How to use pyanthem
+------------
 
+
+Contributing
+------------
 ### Step 1
 
 - **Option 1**
@@ -75,34 +81,39 @@ Using pip:
 
 - **Option 2**
     - 👯 Clone this repo to your local machine using 
-    `git clone https://github.com/nicthib/pyanthem.git`
+    
+    ```python
+    git clone https://github.com/nicthib/pyanthem.git
+    ```
 
 ### Step 2
 
-- **HACK AWAY!**
+- Improve this repo!
 
 ### Step 3
 
 - 🔃 Create a new pull request using <a href="https://github.com/nicthib/pyanthem/compare/" target="_blank">`https://github.com/nicthib/pyanthem/compare/`</a>.
 
-## Team
+Team
+------------
 
 | **Nic Thibodeaux** |
 | :---: |
 | ![](https://avatars1.githubusercontent.com/u/34455769?v=3&s=200)|
 | <a href="http://github.com/nicthib" target="_blank">`github.com/nicthib`</a> |
 
-## FAQ
+FAQ
+------------
 
 - **How do I do *specifically* so and so?**
     - No problem! Just do this.
 
-## Support
-
+Support
+------------
 - Twitter at <a href="http://twitter.com/nicthibs" target="_blank">`@nicthibs`</a>
 
-## License
-
+License
+------------
 [![License](http://img.shields.io/:license-mit-blue.svg?style=flat-square)](http://badges.mit-license.org)
 
 - **[MIT license](http://opensource.org/licenses/mit-license.php)**
