@@ -21,7 +21,7 @@ import numpy as np
 from numpy.matlib import repmat
 from soundfile import read
 from midiutil import MIDIFile
-from misc import *
+from pyanthem.misc import *
 
 def AE_download():
 	from git import Repo
@@ -323,6 +323,7 @@ class GUI(Tk):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
 		self.make_keys() # Just in case
+		self.dump_config()
 		if self.cfg['audio_format'] == 'MIDI':
 			fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
 			MIDI = MIDIFile(1)  # One track
@@ -419,6 +420,7 @@ class GUI(Tk):
 		if not self.cfg['data_is_loaded']:
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
+		self.dump_config()
 		fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 		out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
 		nframes = len(self.data['H_fp'].T)
@@ -572,8 +574,8 @@ class GUI(Tk):
 		filemenu.add_command(label="Quit",command=lambda:[self.quit(),self.destroy(),quit()])
 
 		savemenu=Menu(menubar, tearoff=0)
-		savemenu.add_command(label="Audio", command=lambda:[self.write_audio(),self.dump_config()])
-		savemenu.add_command(label="Video", command=lambda:[self.write_video(),self.dump_config()])
+		savemenu.add_command(label="Audio", command=self.write_audio)
+		savemenu.add_command(label="Video", command=self.write_video)
 		savemenu.add_command(label="Merge A/V", command=self.merge)
 		savemenu.add_command(label="Write A/V then merge", command=self.write_AV)
 		savemenu.add_command(label="Cleanup", command=self.cleanup)
