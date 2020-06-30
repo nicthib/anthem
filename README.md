@@ -30,17 +30,16 @@ git (optional):
 
 ## Installation
 
-1) `pip install pyanthem`
-2) To install the optional "Piano" audio engine, use the command `AE_download()`:
-
+Using pip:
+   ```pip install pyanthem```
+   Note: installation could take some time to add the required packages.
+To install the optional "Piano" audio engine, import and then use the download command:
 ```
 import pyanthem
 pyanthem.AE_download()
 ```
 
 ## Contributing
-
-> To get started...
 
 ### Step 1
 
@@ -52,7 +51,7 @@ pyanthem.AE_download()
 
 ### Step 2
 
-- **HACK AWAY!** 🔨🔨🔨
+- **HACK AWAY!**
 
 ### Step 3
 
@@ -79,4 +78,3 @@ pyanthem.AE_download()
 [![License](http://img.shields.io/:license-mit-blue.svg?style=flat-square)](http://badges.mit-license.org)
 
 - **[MIT license](http://opensource.org/licenses/mit-license.php)**
-- Copyright 2015 © <a href="http://fvcproductions.com" target="_blank">FVCproductions</a>.
