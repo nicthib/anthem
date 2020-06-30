@@ -1,17 +1,10 @@
-MAKE A LOGO
-
 # pyanthem
 
 > a neuroimaging audiovisualization tool to make your data more interesting!
 
-MAKE A GRAPHIC
-[![INSERT YOUR GRAPHIC HERE]()]()
-
----
-
 ## Table of Contents
 
-- [Installation](#requirements) 
+- [Requirements](#requirements) 
 - [Installation](#installation)
 - [Features](#features)
 - [Contributing](#contributing)
@@ -21,12 +14,24 @@ MAKE A GRAPHIC
 - [License](#license)
 
 ---
-
 ## Requirements
-While this package does work out of the box, there are a few requirements to use pyanthem to its full potential:
-1) ffmpeg
-2) git
-3) ...?
+---
+
+Python 3:
+   Currently, pyanthem is tested to work on Python_ 3.6+. This will be updated as more versions are tested
+
+pip:
+   pip is needed for the installation of the pyanthem module and its
+   dependencies.  Most python versions will have pip installed already, 
+   see the  `pip installation`_ page for instructions.
+
+git (optional):
+  git_ allows pyanthem to download external audio files quickly and easily.
+
+.. _Python: https://www.python.org/
+.. _pip installation: https://pip.pypa.io/en/latest/installing/
+.. _git: https://git-scm.com/
+
 ---
 
 ## Installation
@@ -38,11 +43,6 @@ While this package does work out of the box, there are a few requirements to use
 import pyanthem
 pyanthem.AE_download()
 ```
-
----
-
-## Features
-## Usage (Optional)
 
 ---
 
