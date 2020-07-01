@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pyanthem",
-    version="0.40",
+    version="0.47",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="pyanthem - a neuroimaging audiovisualiation tool.",

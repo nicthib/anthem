@@ -14,40 +14,42 @@ from pygame.sndarray import make_sound
 from pygame.time import delay
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.ticker as tkr
 import matplotlib.cm as cmaps
 #https://matplotlib.org/gallery/color/colormap_reference.html
-import matplotlib.ticker as tkr
 import numpy as np
 from numpy.matlib import repmat
 from soundfile import read
 from midiutil import MIDIFile
-from pyanthem.pyanthem_vars import *
+try:
+	from pyanthem.pyanthem_vars import *
+except:
+	from pyanthem_vars import *
+from git import Repo
 
 def AE_download():
-	from git import Repo
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
 		print('Cloning the audio engine to the pyanthem package directory...')
 		try:
 			Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
 			print(f'Audio engine downloaded to {AE_path}')
-		except: # put exception type here
+		except:
 			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
 		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
 
 def demodata_download():
-	from git import Repo
-	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
-	if not os.path.isdir(AE_path):
-		print('Cloning the audio engine to the pyanthem package directory...')
+	path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'anthem_datasets')
+	if not os.path.isdir(path):
+		print('Cloning example datasets to the pyanthem package directory...')
 		try:
-			Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
-			print(f'Audio engine downloaded to {AE_path}')
-		except: # put exception type here
+			Repo.clone_from('https://github.com/nicthib/anthem_datasets.git',path)
+			print(f'Audio engine downloaded to {path}')
+		except:
 			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
-		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
+		print(f'Demo data is already present in {path}. If you want to uninstall, you must manually delete the folder.')
 
 def init_entry(fn):
 	if isinstance(fn, str):
@@ -117,6 +119,9 @@ class GUI(Tk):
 		if len(inputfile) < 2:
 			return
 		self.load_data(inputfile)
+		self.data['H_pp'] = self.data['H']
+		self.data['H_fp'] = self.data['H']
+		self.data['W_pp'] = self.data['W']
 		self.fr.set(self.data['fr'])
 		self.file_in.set(os.path.splitext(os.path.split(inputfile)[1])[0])
 
@@ -134,8 +139,8 @@ class GUI(Tk):
 	def dump_config(self):
 		if not hasattr(self,'data'):
 			return
-		fileout = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
-		pickle.dump(self.cfg,open(fileout, "wb"))
+		file_out = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
+		pickle.dump(self.cfg,open(file_out, "wb"))
 	
 	def load_config(self,filein=None):
 		if filein is None:
@@ -231,13 +236,14 @@ class GUI(Tk):
 				self.Wshow_arr = np.asarray(list(range(len(self.data['H']))))[w]
 		else:
 			self.status['text'] = 'Status: For \'components to show\', please input indices with commas and colons enclosed by square brackets, or \'all\' for all components.'
-		# Edge case: if using cfg on another file with LESS components than expected and a custom Wshow, crop Wshow_arr
+
+		if self.display:
+			self.self_to_cfg()
 
 		self.data['H_pp'] = self.data['H'][self.Wshow_arr,int(len(self.data['H'].T)*self.cfg['st_p']/100):int(len(self.data['H'].T)*self.cfg['en_p']/100)]
 		self.data['H_pp'] = self.data['H_pp']+self.cfg['baseline']
 		self.data['W_pp'] = self.data['W'][:,self.Wshow_arr]
-		if self.display:
-			self.self_to_cfg()
+		
 		self.make_keys()
 
 		# Making note matrix
@@ -335,6 +341,9 @@ class GUI(Tk):
 			else:
 				print('Cannot do this - no dataset has been loaded.')
 				return
+		if self.cfg['save_path'] is None:
+			print('cfg["save_path"] is empty - please provide one!')
+			return
 		if not self.display:
 			self.process_H_W()
 		self.make_keys() # Just in case
@@ -427,16 +436,19 @@ class GUI(Tk):
 			else:
 				print('Cannot do this - no dataset has been loaded.')
 				return
+		if self.cfg['save_path'] is None:
+			print('cfg["save_path"] is empty - please provide one!')
+			return
 		if not self.display:
 			self.process_H_W()
 		if self.display:
 			self.dump_config()
 		fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 		out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
-		nframes = len(self.data['H_fp'].T)
+		nframes = len(self.data['H_pp'].T)
 		for i in range(nframes):
 			frame = (self.data['W_pp']@np.diag(self.data['H_pp'][:,i])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8')
-			out.write(frame)
+			out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 			if self.display:
 				self.status['text'] = f'Status: writing video file, {i+1} out of {nframes} frames written'
 				self.update()
@@ -454,6 +466,9 @@ class GUI(Tk):
 			else:
 				print('Cannot do this - no dataset has been loaded.')
 				return
+		if self.cfg['save_path'] is None:
+			print('cfg["save_path"] is empty - please provide one!')
+			return
 		fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
 		cmd = 'ffmpeg -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
 		os.system(cmd)
@@ -584,7 +599,7 @@ class GUI(Tk):
 		filemenu=Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.load_GUI)
 		filemenu.add_command(label="Load .cfg", command=self.load_config)
-		filemenu.add_command(label="Quit",command=lambda:[quit(),self.destroy()])
+		filemenu.add_command(label="Quit",command=lambda:[quit(),self.destroy(),self.quit()])
 
 		savemenu=Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.write_audio)
@@ -699,7 +714,6 @@ class GUI(Tk):
 		H = H[I,:]
 		print('done.')
 		# Assign variables and save
-
 		self.data = {}
 		self.data['H'] = H
 		self.data['W'] = W.reshape(sh[0],sh[1],n_clusters)
@@ -719,7 +733,7 @@ class GUI(Tk):
 		return self
 
 if __name__ == "__main__":
-	MainWindow = GUI()
+	MainWindow = pyanthem.GUI()
 	MainWindow.mainloop()
 
 # self\.([a-z_]{1,14})\.get\(\)

@@ -1,4 +1,4 @@
-from os.path import realpath, join
+from os.path import realpath, join, split
 self_fns = {
 'fr':'entry',
 'st_p':'entry',
@@ -32,8 +32,9 @@ cmaps_opts = tuple(sorted(['viridis', 'plasma', 'inferno', 'magma', 'cividis','b
 'coolwarm', 'bwr', 'seismic','twilight', 'hsv', 'Paired', 'prism', 'ocean', 
 'terrain','brg', 'rainbow', 'jet'],key=lambda s: s.lower()))
 
-pth=realpath(__file__)
-example_files_decomp = [join(pth,d) for d in ['demo1.mat','demo2.mat','demo3.mat','demo4.mat']]
-example_files_raw = [join(pth,d) for d in ['raw1.mat','raw2.mat']]
+pth=split(realpath(__file__))[0]
+example_files_decomp = [join(pth,'anthem_datasets',d) for d in ['demo1.mat','demo2.mat','demo3.mat','demo4.mat']]
+example_files_raw = [join(pth,'anthem_datasets',d) for d in ['raw1.mat','raw2.mat']]
+example_cfg = [join(pth,'anthem_datasets',d) for d in ['demo1_cfg.p','demo2_cfg.p','demo3_cfg.p','demo4_cfg.p']]
 
 
