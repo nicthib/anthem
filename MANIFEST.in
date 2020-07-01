@@ -1,5 +1,4 @@
 include *.csv
 include *.py
-include *.mat
 include *.ipynb
-include pyanthem/
+include pyanthem/data/*.mat
