@@ -1,6 +1,7 @@
 MANIFEST.in
 README.rst
 setup.py
+conda-environments/pyanthem.yaml
 pyanthem/__init__.py
 pyanthem/pyanthem.py
 pyanthem/pyanthem_vars.py

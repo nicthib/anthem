@@ -26,32 +26,43 @@ try:
 except:
 	from pyanthem_vars import *
 from git import Repo
+import pkg_resources
+print('pyanthem version {}'.format(pkg_resources.require("pyanthem")[0].version))
 
 def AE_download():
-	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
+	'''
+	Downloads the 'Piano' audio engine from  
+	'''
+	AE_path = os.path.join(os.path.dirname(__file__),'anthem_AE')
 	if not os.path.isdir(AE_path):
 		print('Cloning the audio engine to the pyanthem package directory...')
 		try:
-			Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
+			Repo.clone_from('https://github.com/nicthib/anthem_AE.git',AE_path)
 			print(f'Audio engine downloaded to {AE_path}')
 		except:
 			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
 		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
 
-def demodata_download():
-	path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'anthem_datasets')
+def example_data_download():
+	'''
+	Downloads example datasets from https://github.com/nicthib/anthem_datasets
+	'''
+	path = os.path.join(os.path.dirname(__file__),'anthem_datasets')
 	if not os.path.isdir(path):
 		print('Cloning example datasets to the pyanthem package directory...')
 		try:
 			Repo.clone_from('https://github.com/nicthib/anthem_datasets.git',path)
-			print(f'Audio engine downloaded to {path}')
+			print(f'Example datasets downloaded to {path}')
 		except:
 			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
 		print(f'Demo data is already present in {path}. If you want to uninstall, you must manually delete the folder.')
 
 def init_entry(fn):
+	'''
+	Generalized version of SringVar/DoubleVar followed by set()
+	'''
 	if isinstance(fn, str):
 		entry = StringVar()
 	else:
@@ -60,12 +71,18 @@ def init_entry(fn):
 	return entry
 
 def play_for(sample_wave, ms):
+	'''
+	Non-blocking playsound command
+	'''
 	sound = make_sound(sample_wave)
 	sound.play(-1)
 	delay(ms)
 	sound.stop()
 	
 def sine_wave(hz, peak, n_samples=22000):
+	'''
+	Plays a sine wave - used in GUI.preview_notes()
+	'''
 	length = 44100 / float(hz)
 	omega = np.pi * 2 / length
 	xvalues = np.arange(int(length)) * omega
@@ -79,22 +96,26 @@ def sine_wave(hz, peak, n_samples=22000):
 	sound = np.hstack((sound[:,None],sound[:,None]))
 	return sound.astype(np.int16)
 
-def run():
-	root = GUI()
-	root.mainloop()
+def run(display=True):
+	'''
+	main command to run GUI or CLI
+	'''
+	root = GUI(display=display)
+	if display:
+		root.mainloop()
+	else:
+		return root
 
 class GUI(Tk):
 	def __init__(self,display=True):
-		self.package_path = os.path.split(os.path.realpath(__file__))[0]
-		if __name__ == "__main__":
-			self.AE_path = r'C:\Users\dnt21\AppData\Local\Programs\Python\Python37-32\Lib\site-packages\pyanthem\AE'
-		else:
-			self.AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
-		if os.path.isdir(self.AE_path):
-			self.AE_run = True
-		else:
-			self.AE_run = False
-		
+		'''
+		Initializes the GUI instance. display=True runs the Tk.__init__(self)
+		command, while display=False skips that and visual initialization, keeping
+		the GUI 'hidden'
+		'''
+		self.package_path = os.path.dirname(__file__)
+		self.AE_path = os.path.join(os.path.dirname(__file__),'anthem_AE')
+		self.AE_run = os.path.isdir(self.AE_path)
 		self.display = display
 		if self.display:
 			Tk.__init__(self)
@@ -102,17 +123,44 @@ class GUI(Tk):
 			self.initGUI()
 	
 	def quit(self):
-		sys.exit()
+		'''
+		quits the GUI instance. currently, jupyter instances are kinda buggy
+		'''
+		try:
+			get_ipython().__class__.__name__
+			self.destroy()
+		except NameError:
+			sys.exit()
+
+	def check_data_and_save_path(self):
+		'''
+		Checks to make sure data and a save path are defined.
+		'''
+		if not hasattr(self,'data'):
+			if self.display:
+				self.status['text'] = 'Error: no dataset has been loaded.'
+			else:
+				print('Error: no dataset has been loaded.')
+			return False
+		if self.cfg['save_path'] is None:
+			print('Error: cfg["save_path"] is empty - please provide one!')
+			return False
+		return True
 
 	def self_to_cfg(self):
-		# This function is neccesary to allow command-line access of the GUI functions. 
-		# StringVar() and IntVar() allow for dynamic, quick field updating and access, 
-		# but cannot be used outside of a mainloop. for this reason, I convert all 
-		# StringVars and IntVars to a new dict called 'self.cfg', that can be accessed 
-		# oustide the GUI.
+		'''
+		This function is neccesary to allow command-line access of the GUI functions. 
+		StringVar() and IntVar() allow for dynamic, quick field updating and access, 
+		but cannot be used outside of a mainloop. for this reason, I convert all 
+		StringVars and IntVars to a new dict called 'self.cfg', that can be accessed 
+		oustide the GUI.
+		'''
 		self.cfg = {k: getattr(self,k).get() if self_fns[k] is 'entry' else getattr(self,k) for k in self_fns}
 
 	def load_data(self,filein=None):
+		'''
+		loads dataset from filein. At the time, only supports .mat files.
+		'''
 		self.data = loadmat(filein)
 		if (k in self.data for k in ('W','H','fr')):
 			self.data['W_shape'] = self.data['W'].shape
@@ -122,6 +170,9 @@ class GUI(Tk):
 			return self
 
 	def load_GUI(self):
+		'''
+		GUI-addons for load_data. Prompts user with filedialog, assigns defaults and sets GUI fields. 
+		'''
 		inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
 		if len(inputfile) < 2:
 			return
@@ -144,12 +195,18 @@ class GUI(Tk):
 		self.refresh_GUI()
 	
 	def dump_config(self):
+		'''
+		Saves config file. This is run every time a user calls write_audio() or write_video()
+		'''
 		if not hasattr(self,'data'):
 			return
 		file_out = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
 		pickle.dump(self.cfg,open(file_out, "wb"))
 	
 	def load_config(self,filein=None):
+		'''
+		Loads .p file containing dict of parameters needed to create outputs. If display=True, sets GUI fields.
+		'''
 		if filein is None:
 			filein = os.path.normpath(fd.askopenfilename(title='Select pickle file for import',filetypes=[('pickle file','*.p'),('pickle file','*.pkl'),('pickle file','*.pickle')]))
 		if len(filein) < 2:
@@ -167,6 +224,9 @@ class GUI(Tk):
 				return self
 
 	def refresh_GUI(self):
+		'''
+		
+		'''
 		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
@@ -235,6 +295,9 @@ class GUI(Tk):
 		self.refresh_slider([])
 
 	def process_H_W(self):
+		'''
+		
+		'''
 		if self.cfg['Wshow'] == 'all':
 			self.Wshow_arr = list(range(len(self.data['H'])))
 		elif re.match('^\[[0-9,: ]*\]$',self.cfg['Wshow']) is not None:
@@ -285,6 +348,9 @@ class GUI(Tk):
 			self.status['text'] = f'Status: cmap {self.cfg["cmapchoice"]} not found. Please check the matplotlib documentation for a list of standard colormaps.'
 
 	def make_keys(self):
+		'''
+		
+		'''
 		scaledata = []
 		nnotes = len(self.data['H_pp'])
 		with open(os.path.join(self.package_path,'scaledata.csv')) as csvfile:
@@ -300,6 +366,9 @@ class GUI(Tk):
 		self.keys = [k+int(self.cfg['oct_add'])*12 for k in keys]
 
 	def refresh_slider(self,event):
+		'''
+		
+		'''
 		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
@@ -314,6 +383,9 @@ class GUI(Tk):
 		self.canvas_H.draw()
 
 	def preview_notes(self):
+		'''
+		
+		'''
 		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
@@ -342,37 +414,35 @@ class GUI(Tk):
 		self.refresh_GUI()
 
 	def write_audio(self):
-		if not hasattr(self,'data'):
+		'''
+		
+		'''
+		if self.check_data_and_save_path():
+			if not self.display:
+				self.process_H_W()
+			self.make_keys() # Just in case
 			if self.display:
-				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			else:
-				print('Cannot do this - no dataset has been loaded.')
+				self.dump_config()
+			if self.cfg['audio_format'] == 'MIDI':
+				fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
+				MIDI = MIDIFile(1)  # One track
+				MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
+				for j in range(len(self.nd['note'])):
+					# addNote(track, channel, pitch, time + i, duration, volume)
+					MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
+				with open(fn, 'wb') as mid:
+					MIDI.writeFile(mid)
+			elif self.cfg['audio_format'] == 'Piano':
+				self.synth()
+			elif self.cfg['audio_format'] == 'Stream':
+				self.neuralstream()
+			if not self.display:
 				return
-		if self.cfg['save_path'] is None:
-			print('cfg["save_path"] is empty - please provide one!')
-			return
-		if not self.display:
-			self.process_H_W()
-		self.make_keys() # Just in case
-		if self.display:
-			self.dump_config()
-		if self.cfg['audio_format'] == 'MIDI':
-			fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
-			MIDI = MIDIFile(1)  # One track
-			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
-			for j in range(len(self.nd['note'])):
-				# addNote(track, channel, pitch, time + i, duration, volume)
-				MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
-			with open(fn, 'wb') as mid:
-				MIDI.writeFile(mid)
-		elif self.cfg['audio_format'] == 'Piano':
-			self.synth()
-		elif self.cfg['audio_format'] == 'Stream':
-			self.neuralstream()
-		if not self.display:
-			return
 	
 	def synth(self):
+		'''
+		
+		'''
 		fs = 44100
 		r = .5 # release for note
 		#r_mat = np.linspace(1, 0, num=int(fs*r))
@@ -410,6 +480,9 @@ class GUI(Tk):
 			self.status['text'] = f'Status: audio file written to {self.cfg["save_path"]}'
 
 	def neuralstream(self):
+		'''
+		
+		'''
 		C0 = 16.352
 		fs = 44100
 		freqs = [C0*2**(i/12) for i in range(128)]
@@ -437,62 +510,59 @@ class GUI(Tk):
 			print(f'Audio file written to {self.cfg["save_path"]}')
 
 	def write_video(self):
-		if not hasattr(self,'data'):
+		'''
+		Writes video file using self.data['H_pp'] using opencv
+		'''
+		if self.check_data_and_save_path():		
+			if not self.display:
+				self.process_H_W()
 			if self.display:
-				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+				self.dump_config()
+			fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+			out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
+			nframes = len(self.data['H_pp'].T)
+			for i in range(nframes):
+				frame = (self.data['W_pp']@np.diag(self.data['H_pp'][:,i])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8')
+				out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+				if self.display:
+					self.status['text'] = f'Status: writing video file, {i+1} out of {nframes} frames written'
+					self.update()
+			out.release()
+			if self.display:
+				self.status['text'] = f'Status: video file written to {self.cfg["save_path"]}'
 			else:
-				print('Cannot do this - no dataset has been loaded.')
-				return
-		if self.cfg['save_path'] is None:
-			print('cfg["save_path"] is empty - please provide one!')
-			return
-		if not self.display:
-			self.process_H_W()
-		if self.display:
-			self.dump_config()
-		fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-		out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
-		nframes = len(self.data['H_pp'].T)
-		for i in range(nframes):
-			frame = (self.data['W_pp']@np.diag(self.data['H_pp'][:,i])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8')
-			out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-			if self.display:
-				self.status['text'] = f'Status: writing video file, {i+1} out of {nframes} frames written'
-				self.update()
-		out.release()
-		if self.display:
-			self.status['text'] = f'Status: video file written to {self.cfg["save_path"]}'
-		else:
-			print(f'Video file written to {self.cfg["save_path"]}')
-			return self
+				print(f'Video file written to {self.cfg["save_path"]}')
+				return self
 	
 	def merge(self):
-		if not hasattr(self,'data'):
+		'''
+		Merges video and audio with ffmpeg
+		'''
+		if self.check_data_and_save_path():
+			fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
+			cmd = 'ffmpeg -hide_banner -loglevel warning -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
+			os.system(cmd)
 			if self.display:
-				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+				self.status['text'] = f'Status: Video file w/ audio written to {self.cfg["save_path"]}'
 			else:
-				print('Cannot do this - no dataset has been loaded.')
-				return
-		if self.cfg['save_path'] is None:
-			print('cfg["save_path"] is empty - please provide one!')
-			return
-		fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
-		cmd = 'ffmpeg -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
-		os.system(cmd)
-		if self.display:
-			self.status['text'] = f'Status: Video file w/ audio written to {self.cfg["save_path"]}'
-		else:
-			print(f'A/V file written to {self.cfg["save_path"]}')
-			return self
+				print(f'A/V file written to {self.cfg["save_path"]}')
+				return self
 	
 	def write_AV(self):
-		self.write_video()
-		self.write_audio()
-		self.merge()
-		if not self.display:
-			return self
+		'''
+		
+		'''
+		if self.check_data_and_save_path():
+			self.write_video()
+			self.write_audio()
+			self.merge()
+			if not self.display:
+				return self
 
 	def cleanup(self):
+		'''
+		Tries to remove any files that are video or audio only.	
+		'''
 		fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
 		try:
 			os.remove(fn+'.mp4')
@@ -508,6 +578,9 @@ class GUI(Tk):
 		self.save_path.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.cfg['save_path']))
 
 	def initGUI(self):
+		'''
+		
+		'''
 		self.winfo_toplevel().title("pyanthem GUI")
 		self.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -636,6 +709,9 @@ class GUI(Tk):
 		self.frameslider['command']=self.refresh_slider
 
 	def init_plots(self):
+		'''
+		
+		'''
 		# H
 		self.figH = plt.Figure(figsize=(6,6), dpi=100, tight_layout=True)
 		self.Hax1 = self.figH.add_subplot(211)
@@ -672,6 +748,9 @@ class GUI(Tk):
 		Entry(textvariable=self.Wshow,width=15,justify='center').grid(row=29, column=5, columnspan=2,sticky='E')
 
 	def process_raw(self,file_in=None,n_clusters=None,frame_rate=None,save=False):
+		'''
+		
+		'''
 		from sklearn.cluster import KMeans
 		if file_in is None:
 			root = Tk()
@@ -741,8 +820,7 @@ class GUI(Tk):
 		return self
 
 if __name__ == "__main__":
-	root = GUI()
-	root.mainloop()
+	run()
 
 # self\.([a-z_]{1,14})\.get\(\)
 # self\.cfg\[$1\]
