@@ -54,10 +54,10 @@ Contributing
 Step 1
 ------
 - **Option 1**
-    - 🍴 Fork this repo!
+    - Fork this repo!
 
 - **Option 2**
-    - 👯 Clone this repo to your local machine using 
+    - Clone this repo to your local machine using 
     
     ```python
     git clone https://github.com/nicthib/pyanthem.git
@@ -70,7 +70,7 @@ Step 2
 Step 3
 ------
 
-- 🔃 Create a new pull request using `<https://github.com/nicthib/pyanthem/compare/>`_
+- Create a new pull request using `<https://github.com/nicthib/pyanthem/compare/>`_
 
 Team
 ----

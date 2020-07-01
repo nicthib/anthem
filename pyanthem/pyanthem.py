@@ -79,6 +79,10 @@ def sine_wave(hz, peak, n_samples=22000):
 	sound = np.hstack((sound[:,None],sound[:,None]))
 	return sound.astype(np.int16)
 
+def run():
+	root = GUI()
+	root.mainloop()
+
 class GUI(Tk):
 	def __init__(self,display=True):
 		self.package_path = os.path.split(os.path.realpath(__file__))[0]
@@ -96,6 +100,9 @@ class GUI(Tk):
 			Tk.__init__(self)
 			self.default_font=font.nametofont("TkDefaultFont")
 			self.initGUI()
+	
+	def quit(self):
+		sys.exit()
 
 	def self_to_cfg(self):
 		# This function is neccesary to allow command-line access of the GUI functions. 
@@ -502,7 +509,7 @@ class GUI(Tk):
 
 	def initGUI(self):
 		self.winfo_toplevel().title("pyanthem GUI")
-		#self.configure(bg='white')
+		self.protocol("WM_DELETE_WINDOW", self.quit)
 
 		# StringVars
 		self.file_in=init_entry('')
@@ -599,7 +606,7 @@ class GUI(Tk):
 		filemenu=Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.load_GUI)
 		filemenu.add_command(label="Load .cfg", command=self.load_config)
-		filemenu.add_command(label="Quit",command=lambda:[quit(),self.destroy(),self.quit()])
+		filemenu.add_command(label="Quit",command=self.quit)
 
 		savemenu=Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.write_audio)
@@ -713,6 +720,7 @@ class GUI(Tk):
 		W = W[:,I]
 		H = H[I,:]
 		print('done.')
+		
 		# Assign variables and save
 		self.data = {}
 		self.data['H'] = H
@@ -733,8 +741,8 @@ class GUI(Tk):
 		return self
 
 if __name__ == "__main__":
-	MainWindow = pyanthem.GUI()
-	MainWindow.mainloop()
+	root = GUI()
+	root.mainloop()
 
 # self\.([a-z_]{1,14})\.get\(\)
 # self\.cfg\[$1\]

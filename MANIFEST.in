@@ -1,3 +1,4 @@
 include *.csv
 include *.py
 include *.ipynb
+include conda-environments/*.yaml

@@ -1,0 +1,16 @@
+# pyanthem.yaml
+
+# install: conda env create -f pyanthem.yaml 
+# update:  conda env update -f pyanthem.yaml 
+# activate: source activate pyanthem
+# jupyter: python -m ipykernel install --user --name pyanthem --display-name "Python (pyanthem)"
+# remove: conda remove --name pyanthem --all
+
+name: pyanthem
+dependencies:
+  - python=3.7
+  - pip
+  - jupyter
+  #- ipykernel
+  - pip:
+    - pyanthem

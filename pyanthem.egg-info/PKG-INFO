@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyanthem
-Version: 0.47
+Version: 0.48
 Summary: pyanthem - a neuroimaging audiovisualiation tool.
 Home-page: https://github.com/nicthib/pyanthem
 Author: Nic Thibodeaux
@@ -62,10 +62,10 @@ Description: *******************************************************************
         Step 1
         ------
         - **Option 1**
-            - 🍴 Fork this repo!
+            - Fork this repo!
         
         - **Option 2**
-            - 👯 Clone this repo to your local machine using 
+            - Clone this repo to your local machine using 
             
             ```python
             git clone https://github.com/nicthib/pyanthem.git
@@ -78,7 +78,7 @@ Description: *******************************************************************
         Step 3
         ------
         
-        - 🔃 Create a new pull request using `<https://github.com/nicthib/pyanthem/compare/>`_
+        - Create a new pull request using `<https://github.com/nicthib/pyanthem/compare/>`_
         
         Team
         ----
