@@ -1,11 +1,11 @@
 import setuptools
 
-with open("README.md", "r") as fh:
+with open("README.rst", "r") as fh:
 	long_description = fh.read()
 
 setuptools.setup(
     name="pyanthem",
-    version="0.32",
+    version="0.38",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="pyanthem - a neuroimaging audiovisualiation tool.",

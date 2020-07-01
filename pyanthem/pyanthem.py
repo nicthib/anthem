@@ -21,9 +21,22 @@ import numpy as np
 from numpy.matlib import repmat
 from soundfile import read
 from midiutil import MIDIFile
-from pyanthem.misc import *
+from pyanthem.pyanthem_vars import *
 
 def AE_download():
+	from git import Repo
+	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
+	if not os.path.isdir(AE_path):
+		print('Cloning the audio engine to the pyanthem package directory...')
+		try:
+			Repo.clone_from('https://github.com/nicthib/AE.git',AE_path)
+			print(f'Audio engine downloaded to {AE_path}')
+		except: # put exception type here
+			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
+	else:
+		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
+
+def demodata_download():
 	from git import Repo
 	AE_path = os.path.join(os.path.split(os.path.realpath(__file__))[0],'AE')
 	if not os.path.isdir(AE_path):
@@ -66,9 +79,7 @@ def sine_wave(hz, peak, n_samples=22000):
 
 class GUI(Tk):
 	def __init__(self,display=True):
-		Tk.__init__(self)
 		self.package_path = os.path.split(os.path.realpath(__file__))[0]
-		self.data_is_loaded = 0
 		if __name__ == "__main__":
 			self.AE_path = r'C:\Users\dnt21\AppData\Local\Programs\Python\Python37-32\Lib\site-packages\pyanthem\AE'
 		else:
@@ -77,13 +88,14 @@ class GUI(Tk):
 			self.AE_run = True
 		else:
 			self.AE_run = False
-		self.default_font=font.nametofont("TkDefaultFont")
+		
 		self.display = display
-		if not self.display:
-			self.withdraw()
-		self.initGUI()
+		if self.display:
+			Tk.__init__(self)
+			self.default_font=font.nametofont("TkDefaultFont")
+			self.initGUI()
 
-	def self_to_dict(self):
+	def self_to_cfg(self):
 		# This function is neccesary to allow command-line access of the GUI functions. 
 		# StringVar() and IntVar() allow for dynamic, quick field updating and access, 
 		# but cannot be used outside of a mainloop. for this reason, I convert all 
@@ -115,38 +127,35 @@ class GUI(Tk):
 		self.brightness.set(f'{float(f"{np.max(self.data[Hstr]):.3g}"):g}')
 		self.threshold.set(f'{float(f"{np.mean(self.data[Hstr]):.3g}"):g}')
 		self.Wshow_arr = list(range(len(self.data['H'])))
-		self.data_is_loaded = 1
 		self.status['text'] = 'Status: File load successful!'
-		self.self_to_dict()
+		self.self_to_cfg()
 		self.refresh_GUI()
 	
 	def dump_config(self):
-		if not self.data_is_loaded:
+		if not hasattr(self,'data'):
 			return
 		fileout = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
 		pickle.dump(self.cfg,open(fileout, "wb"))
 	
 	def load_config(self,filein=None):
-		display = False
 		if filein is None:
-			display = True
 			filein = os.path.normpath(fd.askopenfilename(title='Select pickle file for import',filetypes=[('pickle file','*.p'),('pickle file','*.pkl'),('pickle file','*.pickle')]))
 		if len(filein) < 2:
 			return
 		with open(filein, "rb") as f:
 			self.cfg = pickle.load(f)
-			for key,value in self.cfg.items():
-				if self_fns[key] is 'entry':
-					getattr(self,key).set(value)
-				else:
-					setattr(self,key,value)
-			if display:
+			if self.display:
+				for key,value in self.cfg.items():
+					if self_fns[key] is 'entry':
+						getattr(self,key).set(value)
+					else:
+						setattr(self,key,value)
 				self.refresh_GUI()
 			else:
 				return self
 
 	def refresh_GUI(self):
-		if not self.data_is_loaded:
+		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
 		self.process_H_W()
@@ -227,7 +236,8 @@ class GUI(Tk):
 		self.data['H_pp'] = self.data['H'][self.Wshow_arr,int(len(self.data['H'].T)*self.cfg['st_p']/100):int(len(self.data['H'].T)*self.cfg['en_p']/100)]
 		self.data['H_pp'] = self.data['H_pp']+self.cfg['baseline']
 		self.data['W_pp'] = self.data['W'][:,self.Wshow_arr]
-		self.self_to_dict()
+		if self.display:
+			self.self_to_cfg()
 		self.make_keys()
 
 		# Making note matrix
@@ -277,7 +287,7 @@ class GUI(Tk):
 		self.keys = [k+int(self.cfg['oct_add'])*12 for k in keys]
 
 	def refresh_slider(self,event):
-		if not self.data_is_loaded:
+		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
 		if hasattr(self,'imWH'):
@@ -291,7 +301,7 @@ class GUI(Tk):
 		self.canvas_H.draw()
 
 	def preview_notes(self):
-		if not self.data_is_loaded:
+		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
 		if get_init() is None: # Checks if pygame has initialized audio engine. Only needs to be run once per instance
@@ -319,11 +329,17 @@ class GUI(Tk):
 		self.refresh_GUI()
 
 	def write_audio(self):
-		if not self.data_is_loaded:
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
+		if not hasattr(self,'data'):
+			if self.display:
+				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			else:
+				print('Cannot do this - no dataset has been loaded.')
+				return
+		if not self.display:
+			self.process_H_W()
 		self.make_keys() # Just in case
-		self.dump_config()
+		if self.display:
+			self.dump_config()
 		if self.cfg['audio_format'] == 'MIDI':
 			fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
 			MIDI = MIDIFile(1)  # One track
@@ -341,11 +357,6 @@ class GUI(Tk):
 			return
 	
 	def synth(self):
-		if not self.display:
-			self.process_H_W()
-		if not self.data_is_loaded:
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
 		fs = 44100
 		r = .5 # release for note
 		#r_mat = np.linspace(1, 0, num=int(fs*r))
@@ -383,11 +394,6 @@ class GUI(Tk):
 			self.status['text'] = f'Status: audio file written to {self.cfg["save_path"]}'
 
 	def neuralstream(self):
-		if not self.data_is_loaded:
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
-		if not self.display:
-			self.process_H_W()
 		C0 = 16.352
 		fs = 44100
 		freqs = [C0*2**(i/12) for i in range(128)]
@@ -415,12 +421,16 @@ class GUI(Tk):
 			print(f'Audio file written to {self.cfg["save_path"]}')
 
 	def write_video(self):
+		if not hasattr(self,'data'):
+			if self.display:
+				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			else:
+				print('Cannot do this - no dataset has been loaded.')
+				return
 		if not self.display:
 			self.process_H_W()
-		if not self.cfg['data_is_loaded']:
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
-		self.dump_config()
+		if self.display:
+			self.dump_config()
 		fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 		out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
 		nframes = len(self.data['H_fp'].T)
@@ -432,15 +442,18 @@ class GUI(Tk):
 				self.update()
 		out.release()
 		if self.display:
-			self.status['text'] = f'Status: video file written to {self.save_path.get()}'
+			self.status['text'] = f'Status: video file written to {self.cfg["save_path"]}'
 		else:
-			print(f'Video file written to {self.save_path.get()}')
+			print(f'Video file written to {self.cfg["save_path"]}')
 			return self
 	
 	def merge(self):
-		if not self.data_is_loaded:
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
+		if not hasattr(self,'data'):
+			if self.display:
+				self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+			else:
+				print('Cannot do this - no dataset has been loaded.')
+				return
 		fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
 		cmd = 'ffmpeg -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
 		os.system(cmd)
@@ -571,7 +584,7 @@ class GUI(Tk):
 		filemenu=Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.load_GUI)
 		filemenu.add_command(label="Load .cfg", command=self.load_config)
-		filemenu.add_command(label="Quit",command=lambda:[self.quit(),self.destroy(),quit()])
+		filemenu.add_command(label="Quit",command=lambda:[quit(),self.destroy()])
 
 		savemenu=Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.write_audio)

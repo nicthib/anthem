@@ -1,10 +1,10 @@
 MANIFEST.in
-README.md
+README.rst
 setup.py
 pyanthem/__init__.py
+pyanthem/misc.py
 pyanthem/pyanthem.py
 pyanthem/scaledata.csv
-pyanthem/testCombobox.py
 pyanthem.egg-info/PKG-INFO
 pyanthem.egg-info/SOURCES.txt
 pyanthem.egg-info/dependency_links.txt
