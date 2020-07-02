@@ -37,4 +37,10 @@ example_files_decomp = [join(pth,'anthem_datasets',d) for d in ['demo1.mat','dem
 example_files_raw = [join(pth,'anthem_datasets',d) for d in ['raw1.mat','raw2.mat']]
 example_cfg = [join(pth,'anthem_datasets',d) for d in ['demo1_cfg.p','demo2_cfg.p','demo3_cfg.p','demo4_cfg.p']]
 
-
+soundfonts=['piano_small','piano_large','e-piano','strings']
+sf_ids=[
+		'12WYF3pc_kYI5myMjgEUnb-y2CeX3fucx',
+		'1DEKLuSiJ4QsHdipfzQdKGsmFn5_4ipOL',
+		'0B4_6p-MMrzwLeTBfNzl1SmVVSEU',
+		'1c0pCI0YdcFEpSLEbCW8HTzFOlJpz0HS9'
+]

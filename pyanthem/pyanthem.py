@@ -9,9 +9,7 @@ from scipy.io.wavfile import write as wavwrite
 from scipy.optimize import nnls
 from scipy.interpolate import interp1d
 from scipy.signal import resample
-from pygame.mixer import Sound, init, quit, get_init, set_num_channels, pre_init
-from pygame.sndarray import make_sound
-from pygame.time import delay
+from pygame.mixer import Sound, init, quit, get_init, set_num_channels, pre_init, music
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.ticker as tkr
@@ -27,6 +25,9 @@ except:
 	from pyanthem_vars import *
 from git import Repo
 import pkg_resources
+from google_drive_downloader import GoogleDriveDownloader as gdd
+
+
 print('pyanthem version {}'.format(pkg_resources.require("pyanthem")[0].version))
 
 def AE_download():
@@ -43,6 +44,22 @@ def AE_download():
 			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 	else:
 		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
+
+def sf_download(font):
+	'''
+	Downloads soundfonts
+	'''
+	sf_path = os.path.join(os.path.dirname(__file__),'anthem_soundfonts')
+	if not os.path.isdir(sf_path):
+		os.mkdir(sf_path)
+	if font in soundfonts:
+		if not os.path.isfile(os.path.join(sf_path,font+'.sf2')):
+			gdd.download_file_from_google_drive(file_id=sf_ids[soundfonts.index(font)],dest_path=os.path.join(sf_path,font+'.sf2'))
+			print(f'Sound font {font} downloaded to soundfont library.')
+		else:
+			print(f'Sound font {font} already present in soundfont library.')
+	else:
+		print(f'Sound font {font} is not available font. Please choose from these: {soundfonts}')
 
 def example_data_download():
 	'''
@@ -386,6 +403,10 @@ class GUI(Tk):
 		'''
 		
 		'''
+		self.make_keys()
+		fn_font = os.path.join(self.package_path,'anthem_soundfonts',self.audio_format.get())
+		fn_midi = os.path.join(self.package_path,'preview.mid')
+		fn_wav = os.path.join(self.package_path,'preview.wav')
 		if not hasattr(self,'data'):
 			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
 			return
@@ -393,24 +414,27 @@ class GUI(Tk):
 			pre_init(44100, -16, 2, 1024)
 			init()
 			set_num_channels(128) # We will never need more than 128...
+		MIDI = MIDIFile(1)  # One track
+		MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
 		for i in range(len(self.keys)):
-			# Load/play notes
-			if self.cfg['audio_format']!='Piano':
-				sound = sine_wave(16.352*2**(self.keys[i]/12), 10000)
-			else:
-				fn = os.path.join(self.AE_path,str(self.keys[i])+'_5_2.ogg');
-				sound = Sound(file=fn)
+			MIDI.addNote(0, 0, self.keys[i], i/2, .5, 100)
+		with open(fn_midi, 'wb') as mid:
+			MIDI.writeFile(mid)
+		os.system('fluidsynth -ni {} {} -F {} -r 44100'.format(fn_font,fn_midi,fn_wav))
+		music.load(fn_wav)
+		for i in range(len(self.keys)):
+			t = time.time()
 			self.imW.remove()
 			Wtmp = self.data['W_pp'][:,i]
 			cmaptmp = self.cmap[i,:-1]
 			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.data['W_pp'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
 			self.canvas_W.draw()
 			self.update()
-			if self.cfg['audio_format']=='Stream':
-				play_for(sound, 500)
-			else:
-				sound.play()
-				time.sleep(.5)
+			if i == 0:
+				music.play(0)
+			time.sleep(.5-np.min(((time.time()-t),.5)))
+		os.remove(fn_midi)
+		os.remove(fn_wav)
 		self.refresh_GUI()
 
 	def write_audio(self):
@@ -423,15 +447,17 @@ class GUI(Tk):
 			self.make_keys() # Just in case
 			if self.display:
 				self.dump_config()
-			if self.cfg['audio_format'] == 'MIDI':
-				fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
+			if self.cfg['audio_format'] == 'MIDI' or self.cfg['audio_format'].endswith('.sf2'):
+				fn_midi = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
+				fn_midi = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.wav'
 				MIDI = MIDIFile(1)  # One track
 				MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
 				for j in range(len(self.nd['note'])):
 					# addNote(track, channel, pitch, time + i, duration, volume)
 					MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
-				with open(fn, 'wb') as mid:
+				with open(fn_midi, 'wb') as mid:
 					MIDI.writeFile(mid)
+				os.system('fluidsynth -ni {} {} -F {} -r 44100'.format(self.sound_font,fn_midi,fn_wav))
 			elif self.cfg['audio_format'] == 'Piano':
 				self.synth()
 			elif self.cfg['audio_format'] == 'Stream':
@@ -645,13 +671,12 @@ class GUI(Tk):
 		Button(text='Update',width=15,command=self.refresh_GUI).grid(row=8, column=5,columnspan=2)
 
 		# Option/combobox values
+		audio_format_opts = ['Stream']
+		sf_path = os.path.join(os.path.dirname(__file__),'anthem_soundfonts')
+		if os.path.isdir(sf_path):
+			fonts_avail = text_files = [f for f in os.listdir(sf_path) if f.endswith('.sf2')]
+			audio_format_opts.extend(fonts_avail)
 		
-		if self.AE_run:
-			audio_format_opts = ['Stream','Piano','MIDI']
-		else:
-			audio_format_opts = ['Stream','MIDI']
-			self.status['text'] = 'Status: AE engine not downloaded. Please do so using AE_download() to enable "Piano" format'
-
 		# Option Menus
 		oct_add_menu = OptionMenu(self,self.oct_add,*oct_add_opts)
 		oct_add_menu.config(width=7)
@@ -788,14 +813,14 @@ class GUI(Tk):
 		print('Performing NNLS...',end='')
 		for i in range(len(nnidx)):
 			W[nnidx[i],:]=nnls(H.T,data_nn[i,:])[0]
-		# Sort top to bottom
+		# Sort bottom to top
 		xc,yc = [], []
 		(X,Y) = np.meshgrid(range(sh[0]),range(sh[1]))
 		for i in range(len(W.T)):
 			Wtmp = W[:,i].reshape(sh[0],sh[1])
 			xc.append((X*Wtmp).sum() / Wtmp.sum().astype("float"))
 			yc.append((Y*Wtmp).sum() / Wtmp.sum().astype("float"))
-		I = np.argsort(yc)
+		I = np.argsort(-yc)
 		W = W[:,I]
 		H = H[I,:]
 		print('done.')

@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pyanthem",
-    version="0.52",
+    version="0.54",
     author="Nic Thibodeaux",
     author_email="dnt2111@columbia.edu",
     description="pyanthem - a neuroimaging audiovisualiation tool.",
@@ -24,6 +24,8 @@ setuptools.setup(
         'pygame',
         'opencv-python',
         'sklearn',
+        'requests',
+        'googledrivedownloader',
       ],
     include_package_data=True,
     classifiers=[
