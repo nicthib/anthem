@@ -1,84 +1,49 @@
-import os, random, sys, cv2, time, csv, pickle, re
+import os, random, sys, time, csv, pickle, re, pkg_resources
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-from tkinter import StringVar, DoubleVar, Tk, Label, Entry, Button, OptionMenu, Checkbutton, Message, Menu, IntVar, Scale, HORIZONTAL
+from tkinter import StringVar, DoubleVar, Tk, Label, Entry, Button, OptionMenu, Checkbutton, Message, Menu, IntVar, Scale, HORIZONTAL, simpledialog, messagebox, Toplevel
 from tkinter.ttk import Progressbar, Separator, Combobox
 from tkinter import filedialog as fd 
 import tkinter.font as font
 from scipy.io import loadmat, savemat, whosmat
-from scipy.io.wavfile import write as wavwrite
 from scipy.optimize import nnls
 from scipy.interpolate import interp1d
-from scipy.signal import resample
-from pygame.mixer import Sound, init, quit, get_init, set_num_channels, pre_init, music
+from sklearn.cluster import KMeans
+from pygame.mixer import init, quit, get_init, set_num_channels, pre_init, music
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.ticker as tkr
-import matplotlib.cm as cmaps
-#https://matplotlib.org/gallery/color/colormap_reference.html
+import matplotlib.cm as cmaps # https://matplotlib.org/gallery/color/colormap_reference.html
 import numpy as np
 from numpy.matlib import repmat
-from soundfile import read
-from midiutil import MIDIFile
+from midiutil import MIDIFile # need to move to MIDO for 
 try:
 	from pyanthem.pyanthem_vars import *
 except:
 	from pyanthem_vars import *
 from git import Repo
-import pkg_resources
 from google_drive_downloader import GoogleDriveDownloader as gdd
+import subprocess as sp
+import PIL.Image as Image
 
-
-print('pyanthem version {}'.format(pkg_resources.require("pyanthem")[0].version))
-
-def AE_download():
+def download_soundfont(font):
 	'''
-	Downloads the 'Piano' audio engine from  
+	Downloads soundfonts from https://sites.google.com/site/soundfonts4u/
 	'''
-	AE_path = os.path.join(os.path.dirname(__file__),'anthem_AE')
-	if not os.path.isdir(AE_path):
-		print('Cloning the audio engine to the pyanthem package directory...')
-		try:
-			Repo.clone_from('https://github.com/nicthib/anthem_AE.git',AE_path)
-			print(f'Audio engine downloaded to {AE_path}')
-		except:
-			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
-	else:
-		print(f'Audio engine is already present in {AE_path}. If you want to uninstall, you must manually delete the AE folder.')
-
-def sf_download(font):
-	'''
-	Downloads soundfonts
-	'''
-	sf_path = os.path.join(os.path.dirname(__file__),'anthem_soundfonts')
+	sf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'anthem_soundfonts')
 	if not os.path.isdir(sf_path):
 		os.mkdir(sf_path)
-	if font in soundfonts:
+	try:
 		if not os.path.isfile(os.path.join(sf_path,font+'.sf2')):
-			gdd.download_file_from_google_drive(file_id=sf_ids[soundfonts.index(font)],dest_path=os.path.join(sf_path,font+'.sf2'))
+			gdd.download_file_from_google_drive(file_id=sound_fonts[font],dest_path=os.path.join(sf_path,font+'.sf2'))
 			print(f'Sound font {font} downloaded to soundfont library.')
 		else:
 			print(f'Sound font {font} already present in soundfont library.')
-	else:
-		print(f'Sound font {font} is not available font. Please choose from these: {soundfonts}')
-
-def example_data_download():
-	'''
-	Downloads example datasets from https://github.com/nicthib/anthem_datasets
-	'''
-	path = os.path.join(os.path.dirname(__file__),'anthem_datasets')
-	if not os.path.isdir(path):
-		print('Cloning example datasets to the pyanthem package directory...')
-		try:
-			Repo.clone_from('https://github.com/nicthib/anthem_datasets.git',path)
-			print(f'Example datasets downloaded to {path}')
-		except:
-			print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
-	else:
-		print(f'Demo data is already present in {path}. If you want to uninstall, you must manually delete the folder.')
+	except:
+		print(f'Sound font {font} is not available font. Please choose from these: {sound_fonts.keys()}')
 
 def init_entry(fn):
 	'''
-	Generalized version of SringVar/DoubleVar followed by set()
+	Generalized version of StringVar/DoubleVar followed by set()
 	'''
 	if isinstance(fn, str):
 		entry = StringVar()
@@ -87,40 +52,33 @@ def init_entry(fn):
 	entry.set(fn)
 	return entry
 
-def play_for(sample_wave, ms):
+def stack_videos(videos,fn='output.mp4'):
 	'''
-	Non-blocking playsound command
+	Stacks .mp4 videos horizontally (and combines audio)
 	'''
-	sound = make_sound(sample_wave)
-	sound.play(-1)
-	delay(ms)
-	sound.stop()
-	
-def sine_wave(hz, peak, n_samples=22000):
-	'''
-	Plays a sine wave - used in GUI.preview_notes()
-	'''
-	length = 44100 / float(hz)
-	omega = np.pi * 2 / length
-	xvalues = np.arange(int(length)) * omega
-	onecycle = peak * np.sin(xvalues)
-	sound = np.resize(onecycle, (n_samples,))
-	env = np.ones(len(sound),)
-	attack = int(44100*.15)
-	env[:attack] = np.linspace(0,1,attack)
-	env[-attack:] = np.linspace(1,0,attack)
-	sound=sound*env
-	sound = np.hstack((sound[:,None],sound[:,None]))
-	return sound.astype(np.int16)
+	nvids = len(videos)
+	instr = ''
+	for i in range(len(videos)):
+		instr += ' -i '+videos[i]
+	os.system('ffmpeg -y '+instr+' -filter_complex "[0:v][1:v]hstack=inputs='+str(nvids)+'[v]; [0:a][1:a]amerge[a]" -map "[v]" -map "[a]" -ac 2 '+fn)
+
+def uiopen(title,filetypes):
+	root = Tk()
+	root.withdraw()
+	file_in = os.path.normpath(fd.askopenfilename(title=title,filetypes=filetypes))
+	root.update()
+	root.destroy()
+	return file_in
 
 def run(display=True):
 	'''
-	main command to run GUI or CLI
+	Main command to run GUI or CLI
 	'''
 	root = GUI(display=display)
 	if display:
 		root.mainloop()
 	else:
+		print('Welcome to pyanthem v{}!'.format(pkg_resources.require("pyanthem")[0].version))
 		return root
 
 class GUI(Tk):
@@ -130,35 +88,44 @@ class GUI(Tk):
 		command, while display=False skips that and visual initialization, keeping
 		the GUI 'hidden'
 		'''
-		self.package_path = os.path.dirname(__file__)
-		self.AE_path = os.path.join(os.path.dirname(__file__),'anthem_AE')
-		self.AE_run = os.path.isdir(self.AE_path)
 		self.display = display
+		self.download_data()
 		if self.display:
 			Tk.__init__(self)
 			self.default_font=font.nametofont("TkDefaultFont")
 			self.initGUI()
 	
-	def quit(self):
+	def quit(self,event=None):
 		'''
-		quits the GUI instance. currently, jupyter instances are kinda buggy
+		Quits the GUI instance. currently, jupyter instances are kinda buggy
 		'''
 		try:
-			get_ipython().__class__.__name__
+			# This raises a NameError exception in a notebook env, since 
+			# sys.exit() is not an appropriate method
+			get_ipython().__class__.__name__ 
 			self.destroy()
 		except NameError:
 			sys.exit()
 
-	def check_data_and_save_path(self):
+	def message(self,message):
 		'''
-		Checks to make sure data and a save path are defined.
+		Sends message through print if no GUI, through self.status if GUI is running
+		'''
+		if self.display:
+			self.status['text'] = message
+		else:
+			print(message)
+
+	def check_data(self):
+		'''
+		Checks to make sure data is loaded.
 		'''
 		if not hasattr(self,'data'):
-			if self.display:
-				self.status['text'] = 'Error: no dataset has been loaded.'
-			else:
-				print('Error: no dataset has been loaded.')
+			self.message('Error: No dataset has been loaded.')
 			return False
+		return True
+
+	def check_save_path(self):
 		if self.cfg['save_path'] is None:
 			print('Error: cfg["save_path"] is empty - please provide one!')
 			return False
@@ -166,67 +133,93 @@ class GUI(Tk):
 
 	def self_to_cfg(self):
 		'''
-		This function is neccesary to allow command-line access of the GUI functions. 
+		This function is necessary to allow command-line access of the GUI functions. 
 		StringVar() and IntVar() allow for dynamic, quick field updating and access, 
-		but cannot be used outside of a mainloop. for this reason, I convert all 
-		StringVars and IntVars to a new dict called 'self.cfg', that can be accessed 
-		oustide the GUI.
+		but cannot be used outside of a mainloop or pickled. for this reason, I convert 
+		all StringVars and IntVars to a new dict called 'self.cfg', that can be accessed 
+		oustide the GUI and dumped to a pickle file, which essentially "freezes" the GUI.
 		'''
 		self.cfg = {k: getattr(self,k).get() if self_fns[k] is 'entry' else getattr(self,k) for k in self_fns}
+		if hasattr(self,'cfginfo'):
+			text=''
+			for key in self.cfg:
+				text+=str(key)+': '+str(self.cfg[key])+'\n'
+			self.cfginfotext['text']=text
+			self.cfginfo.update()
+
+
+	def download_data(self):
+		'''
+		Downloads example datasets from https://github.com/nicthib/anthem_datasets
+		'''
+		path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'anthem_datasets')
+		if not os.path.isdir(path):
+			print('Detected new installation. Downloading example datasets...')
+			try:
+				Repo.clone_from('https://github.com/nicthib/anthem_datasets.git',path)
+				print(f'Example datasets downloaded to {path}')
+			except:
+				print('ERROR: git executable not present. Please visit https://git-scm.com/downloads to install.')
 
 	def load_data(self,filein=None):
 		'''
 		loads dataset from filein. At the time, only supports .mat files.
 		'''
+		if filein is None:
+			filein=uiopen(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+		if filein == '.':
+			return
 		self.data = loadmat(filein)
-		if (k in self.data for k in ('W','H','fr')):
+		try:
 			self.data['W_shape'] = self.data['W'].shape
 			self.data['W'] = self.data['W'].reshape(self.data['W'].shape[0]*self.data['W'].shape[1],self.data['W'].shape[2])
 			self.data['fr'] = float(self.data['fr'])
-		if not self.display:
-			return self
+			if not self.display:
+				return self
+		except:
+			self.message('Error: .mat file incompatible. Please select a .mat file with three variables: W (3D), H (2D), and fr (1-element float)')
 
 	def load_GUI(self):
 		'''
 		GUI-addons for load_data. Prompts user with filedialog, assigns defaults and sets GUI fields. 
 		'''
-		inputfile = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
-		if len(inputfile) < 2:
+		filein=uiopen(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+		if filein == '.':
 			return
-		self.load_data(inputfile)
+		self.load_data(filein)
 		self.data['H_pp'] = self.data['H']
 		self.data['H_fp'] = self.data['H']
 		self.data['W_pp'] = self.data['W']
 		self.fr.set(self.data['fr'])
-		self.file_in.set(os.path.splitext(os.path.split(inputfile)[1])[0])
+		self.file_in.set(os.path.splitext(os.path.split(filein)[1])[0])
 
-		# Set defaults
+		# Set some defaults
 		self.file_out.set(self.file_in.get())
-		self.save_path.set(os.path.split(inputfile)[0])
-		Hstr = 'H'
-		self.brightness.set(f'{float(f"{np.max(self.data[Hstr]):.3g}"):g}')
-		self.threshold.set(f'{float(f"{np.mean(self.data[Hstr]):.3g}"):g}')
+		self.save_path.set(os.path.split(filein)[0])
+		Hstr = 'H' # for whatever reason, can't double nest quotations in an f-string :/
+		self.brightness.set(f'{float(f"{np.mean(self.data[Hstr])+np.std(self.data[Hstr]):.3g}"):g}')
+		self.threshold.set(f'{float(f"{np.mean(self.data[Hstr])+np.std(self.data[Hstr]):.3g}"):g}')
 		self.Wshow_arr = list(range(len(self.data['H'])))
-		self.status['text'] = 'Status: File load successful!'
-		self.self_to_cfg()
+		self.process_H_W()
+		self.init_plots()
 		self.refresh_GUI()
 	
-	def dump_config(self):
+	def dump_cfg(self):
 		'''
 		Saves config file. This is run every time a user calls write_audio() or write_video()
 		'''
-		if not hasattr(self,'data'):
-			return
-		file_out = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
-		pickle.dump(self.cfg,open(file_out, "wb"))
+		if self.check_data():
+			file_out = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'_cfg.p'
+			pickle.dump(self.cfg,open(file_out, "wb"))
+			self.message(f'cfg file saved to {file_out}')
 	
 	def load_config(self,filein=None):
 		'''
 		Loads .p file containing dict of parameters needed to create outputs. If display=True, sets GUI fields.
 		'''
 		if filein is None:
-			filein = os.path.normpath(fd.askopenfilename(title='Select pickle file for import',filetypes=[('pickle file','*.p'),('pickle file','*.pkl'),('pickle file','*.pickle')]))
-		if len(filein) < 2:
+			filein=uiopen(title='Select pickle file for import',filetypes=[('pickle file','*.p'),('pickle file','*.pkl'),('pickle file','*.pickle')])
+		if filein == '.':
 			return
 		with open(filein, "rb") as f:
 			self.cfg = pickle.load(f)
@@ -240,14 +233,12 @@ class GUI(Tk):
 			else:
 				return self
 
-	def refresh_GUI(self):
+	def refresh_GUI(self,event=None):
 		'''
 		
 		'''
-		if not hasattr(self,'data'):
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
+		if not self.check_data():
 			return
-		self.process_H_W()
 		self.init_plots()
 
 		# Update slider (Need to move the command)
@@ -255,7 +246,7 @@ class GUI(Tk):
 			self.frameslider.set(1)
 		self.frameslider['to'] = int(len(self.data['H_pp'].T)-1)
 
-		Hstd = self.data['H_pp'].std()*3 # 3 Could be in an option json/yaml file
+		Hstd = self.data['H_pp'].std()*3
 		if self.offsetH.get():
 			tmpH = self.data['H_pp'].T - repmat([w*Hstd for w in list(range(len(self.Wshow_arr)))],len(self.data['H_pp'].T),1)
 		else:
@@ -270,7 +261,7 @@ class GUI(Tk):
 			self.legend = self.Hax1.legend((thresh_line[0],), ('Threshold',))
 			#self.legend = self.Hax1.legend((thresh_line[0],zero_line[0]), ('Threshold','Baseline'))
 
-		if self.cfg['audio_format'] == 'Stream':
+		if self.cfg['audio_format'] == 'Analog':
 			self.H_p_plot = self.Hax2.imshow(self.data['H_pp'],interpolation='none',cmap=plt.get_cmap('gray'))
 			self.H_p_plot.set_clim(0, np.max(self.data['H_pp']))
 		else:
@@ -286,12 +277,15 @@ class GUI(Tk):
 		else:
 			self.Hax1.set(ylabel='Magnitude')
 
-		self.Hax1.spines['right'].set_visible(False)
+		self.Hax1.spines['left'].set_visible(False)
 		self.Hax1.spines['top'].set_visible(False)
 		self.Hax1.spines['bottom'].set_visible(False)
+		self.Hax1.spines['right'].set_visible(False)
+		self.Hax1.yaxis.tick_right()
+		self.Hax1.yaxis.set_label_position("right")
 		self.Hax1.tick_params(axis='x',which='both',bottom=False, top=False, labelbottom=False, right=False)
 
-		if len(self.Wshow_arr) > 10:
+		if len(self.Wshow_arr) > 12:
 			yticks = np.arange(4,len(self.data['H_pp']),5)
 			yticklabels = np.arange(4,len(self.data['H_pp']),5)
 		else:
@@ -301,6 +295,12 @@ class GUI(Tk):
 		if self.offsetH.get():
 			self.Hax1.set(yticks=-yticks*Hstd,yticklabels=yticklabels)
 		self.Hax2.set(yticks=yticks,yticklabels=yticklabels)
+		self.Hax2.spines['left'].set_visible(False)
+		self.Hax2.spines['top'].set_visible(False)
+		self.Hax2.spines['bottom'].set_visible(False)
+		self.Hax2.spines['right'].set_visible(False)
+		self.Hax2.yaxis.tick_right()
+		self.Hax2.yaxis.set_label_position("right")
 		self.imWH = self.Wax1.imshow((self.data['W_pp']@np.diag(self.data['H_pp'][:,self.frameslider.get()])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
 		self.imW = self.Wax2.imshow((self.data['W_pp']@self.cmap[:,:-1]*255/np.max(self.data['W_pp'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
 		
@@ -310,275 +310,221 @@ class GUI(Tk):
 		self.canvas_H.draw()
 		self.canvas_W.draw()
 		self.refresh_slider([])
+		self.status['text'] = '♫ ♪ ♫ ♪ ♫'
 
 	def process_H_W(self):
 		'''
-		
+		Core function of pyanthem. Applies all cfg settings to dataset, and creates the note dict used for synthesis.
+		Automatically calls refresh_GUI() if display=True
 		'''
+		if self.display:
+			self.self_to_cfg()
+		self.status['text'] = 'Updating...'
+		self.update()
 		if self.cfg['Wshow'] == 'all':
 			self.Wshow_arr = list(range(len(self.data['H'])))
+		# regex expression which lazily checks for a bracketed expression containing numbers, colons and commas.
 		elif re.match('^\[[0-9,: ]*\]$',self.cfg['Wshow']) is not None:
-			w = eval('np.r_'+self.cfg['Wshow'])
+			# This is a magic function which transforms bracketed string arrays to actual numpy arrays.
+			# Example: '[1,3,5:8]' --> array([1,3,5,6,7])
+			self.Wshow_arr = eval('np.r_'+self.cfg['Wshow']) 
+			# Edge case
 			if np.max(w) <= len(self.data['H']):
 				self.Wshow_arr = np.asarray(list(range(len(self.data['H']))))[w]
 		else:
-			self.status['text'] = 'Status: For \'components to show\', please input indices with commas and colons enclosed by square brackets, or \'all\' for all components.'
-
-		if self.display:
-			self.self_to_cfg()
-
-		self.data['H_pp'] = self.data['H'][self.Wshow_arr,int(len(self.data['H'].T)*self.cfg['st_p']/100):int(len(self.data['H'].T)*self.cfg['en_p']/100)]
+			self.message('For \'components to show\', please input indices with commas and colons enclosed by square brackets, or \'all\' for all components.')
+			return
+		
+		self.data['H_pp'] = self.data['H'][self.Wshow_arr,int(len(self.data['H'].T)*self.cfg['start_percent']/100):int(len(self.data['H'].T)*self.cfg['end_percent']/100)]
 		self.data['H_pp'] = self.data['H_pp']+self.cfg['baseline']
 		self.data['W_pp'] = self.data['W'][:,self.Wshow_arr]
 		
-		self.make_keys()
+		# make_keys()
+		self.keys,i = [],0
+		while len(self.keys) < len(self.data['H_pp']):
+			self.keys.extend([k+i+key_opts[self.cfg['key']]+octave_add_opts[self.cfg['octave_add']] for k in scale_keys[self.cfg['scale_type']]])
+			i+=12
+		self.keys=self.keys[:len(self.data['H_pp'])]
 
-		# Making note matrix
+		# Making note dict
 		true_fr = self.cfg['fr']*self.cfg['speed']/100
 		ns = int(len(self.data['H_pp'].T)*1000/true_fr)
-		H = resample(self.data['H_pp'], ns, axis=1)
-		Hb = H > self.cfg['threshold']
-		Hb = Hb * 1
-		Hb[:,0] = 0
-		Hb[:,-1] = 0
-		Hmax = np.max(H)
+		t1 = np.linspace(0,len(self.data['H_pp'].T)/self.cfg['fr'],len(self.data['H_pp'].T))
+		t2 = np.linspace(0,len(self.data['H_pp'].T)/self.cfg['fr'],ns)
+		nchan = len(self.data['H_pp'])
+		Hmax = np.max(self.data['H_pp'])
 		self.data['H_fp'] = np.zeros(np.shape(self.data['H_pp']))
 		self.nd = {}
 		self.nd['st'],self.nd['en'],self.nd['note'],self.nd['mag'] = [],[],[],[]
-		for i in range(len(H)):
-			TC = np.diff(Hb[i,:])
+		for i in range(nchan):
+			H_rs = interp1d(t1,self.data['H_pp'][i,:])(t2)
+			H_b = H_rs.copy()
+			H_b[H_b<self.cfg['threshold']] = 0
+			H_b[H_b>=self.cfg['threshold']] = 1
+			H_b[0] = 0
+			H_b[-1] = 0
+			TC = np.diff(H_b)
 			st = np.argwhere(TC == 1)
 			en = np.argwhere(TC == -1)
+			bn = np.ndarray.flatten(np.argwhere(np.ndarray.flatten(en-st) < 2)).tolist()
+			st = np.ndarray.flatten(st).tolist()
+			en = np.ndarray.flatten(en).tolist()
+			# Remove super short notes
+			for ii in sorted(bn, reverse=True):
+				st.pop(ii)
+				en.pop(ii)
+			
 			self.nd['st'].extend([x/1000 for x in st])
 			self.nd['en'].extend([x/1000 for x in en])
 			for j in range(len(st)):
-				tmpmag = np.max(H[i,st[j][0]:en[j][0]])
-				self.data['H_fp'][i,int(st[j][0]*true_fr/1000):int(en[j][0]*true_fr/1000)] = tmpmag
-				self.nd['mag'].append(int(tmpmag * 127 / Hmax))
+				mag = np.max(H_rs[st[j]:en[j]])
+				self.data['H_fp'][i,int(st[j]*true_fr/1000):int(en[j]*true_fr/1000)] = mag
+				self.nd['mag'].append(int(mag * 127 / Hmax))
 				self.nd['note'].append(self.keys[i])
-
+			self.data['H_pp'][self.data['H_pp'] < 0] = 0
 		# Colormap
 		if hasattr(cmaps,self.cfg['cmapchoice']):
 			cmap = getattr(cmaps,self.cfg['cmapchoice'])
 			self.cmap = cmap(np.linspace(0,1,len(self.data['H_pp'])))
 		else:
-			self.status['text'] = f'Status: cmap {self.cfg["cmapchoice"]} not found. Please check the matplotlib documentation for a list of standard colormaps.'
-
-	def make_keys(self):
-		'''
+			self.message(f'cmap {self.cfg["cmapchoice"]} not found. Please check the matplotlib documentation for a list of standard colormaps.')
+			return
+		if self.display:
+			self.refresh_GUI()
+		self.status['text'] = '♫ ♪ ♫ ♪ ♫'
 		
-		'''
-		scaledata = []
-		nnotes = len(self.data['H_pp'])
-		with open(os.path.join(self.package_path,'scaledata.csv')) as csvfile:
-			file = csv.reader(csvfile)
-			for row in file:
-				scaledata.append([int(x) for x in row if x != 'NaN'])
-		noteIDX = scaledata[scale_type_opts.index(self.cfg['scale_type'])]
-		noteIDX = [k+key_opts.index(self.cfg['key']) for k in noteIDX]
-		keys = []
-		for i in range(int(np.ceil(nnotes/len(noteIDX)))):
-			keys.extend([k+i*12 for k in noteIDX])
-		keys = keys[:nnotes] # Crop to nnotes to avoid confusion
-		self.keys = [k+int(self.cfg['oct_add'])*12 for k in keys]
 
 	def refresh_slider(self,event):
 		'''
 		
 		'''
-		if not hasattr(self,'data'):
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
-		if hasattr(self,'imWH'):
-			self.imWH.remove()
-		self.imWH = self.Wax1.imshow((self.data['W_pp']@np.diag(self.data['H_pp'][:,self.frameslider.get()])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
-		if not hasattr(self,'H_vline'):
-			self.H_vline, = self.Hax1.plot([],'k',linewidth=.5)
-		self.H_vline.set_xdata([self.frameslider.get(), self.frameslider.get()])
-		self.H_vline.set_ydata(self.Hax1.get_ylim())
+		#try: # May want to use hasattr() here instead
+		self.imWH.set_data((self.data['W_pp']@np.diag(self.data['H_pp'][:,self.frameslider.get()])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
 		self.canvas_W.draw()
-		self.canvas_H.draw()
+		#self.H_vline.set_xdata([self.frameslider.get(), self.frameslider.get()])
+		#self.H_vline.set_ydata(self.Hax1.get_ylim())
+		#self.canvas_H.draw()
 
 	def preview_notes(self):
 		'''
 		
 		'''
-		self.make_keys()
-		fn_font = os.path.join(self.package_path,'anthem_soundfonts',self.audio_format.get())
-		fn_midi = os.path.join(self.package_path,'preview.mid')
-		fn_wav = os.path.join(self.package_path,'preview.wav')
-		if not hasattr(self,'data'):
-			self.status['text'] = 'Status: Cannot do this - no dataset has been loaded.'
-			return
-		if get_init() is None: # Checks if pygame has initialized audio engine. Only needs to be run once per instance
-			pre_init(44100, -16, 2, 1024)
-			init()
-			set_num_channels(128) # We will never need more than 128...
-		MIDI = MIDIFile(1)  # One track
-		MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
-		for i in range(len(self.keys)):
-			MIDI.addNote(0, 0, self.keys[i], i/2, .5, 100)
-		with open(fn_midi, 'wb') as mid:
-			MIDI.writeFile(mid)
-		os.system('fluidsynth -ni {} {} -F {} -r 44100'.format(fn_font,fn_midi,fn_wav))
-		music.load(fn_wav)
-		for i in range(len(self.keys)):
-			t = time.time()
-			self.imW.remove()
-			Wtmp = self.data['W_pp'][:,i]
-			cmaptmp = self.cmap[i,:-1]
-			self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.data['W_pp'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
-			self.canvas_W.draw()
-			self.update()
-			if i == 0:
-				music.play(0)
-			time.sleep(.5-np.min(((time.time()-t),.5)))
-		os.remove(fn_midi)
-		os.remove(fn_wav)
-		self.refresh_GUI()
+		if self.audio_format.get().endswith('.sf2') and self.check_data():
+			self.process_H_W()
+			self.message('Previewing notes...')
+			fn_font = os.path.join(os.path.dirname(os.path.abspath(__file__)),'anthem_soundfonts',self.audio_format.get())
+			fn_midi = os.path.join(os.path.dirname(os.path.abspath(__file__)),'preview.mid')
+			fn_wav = os.path.join(os.path.dirname(os.path.abspath(__file__)),'preview.wav')
+			if get_init() is None: # Checks if pygame has initialized audio engine. Only needs to be run once per instance
+				pre_init(44100, -16, 2, 1024)
+				init()
+				set_num_channels(128) # We will never need more than 128...
+			MIDI = MIDIFile(1)  # One track
+			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
+			for i in range(len(self.keys)):
+				MIDI.addNote(0, 0, self.keys[i], i/2, .5, 100)
+			with open(fn_midi, 'wb') as mid:
+				MIDI.writeFile(mid)
+			cmd = 'fluidsynth -ni -F {} -r 44100 {} {} '.format(fn_wav,fn_font,fn_midi)
+			print(cmd)
+			os.system(cmd)
+			music.load(fn_wav)
+			for i in range(len(self.keys)):
+				t = time.time()
+				self.imW.remove()
+				Wtmp = self.data['W_pp'][:,i]
+				cmaptmp = self.cmap[i,:-1]
+				self.imW = self.Wax2.imshow((Wtmp[:,None]@cmaptmp[None,:]*255/np.max(self.data['W_pp'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8'))
+				self.canvas_W.draw()
+				self.update()
+				if i == 0:
+					music.play(0)
+				time.sleep(.5-np.min(((time.time()-t),.5)))
+			os.remove(fn_midi)
+			os.remove(fn_wav)
+			self.refresh_GUI()
+		else:
+			self.message('Please choose an .sf2 under "Audio format" to preview notes.')
 
 	def write_audio(self):
 		'''
 		
 		'''
-		if self.check_data_and_save_path():
-			if not self.display:
-				self.process_H_W()
-			self.make_keys() # Just in case
-			if self.display:
-				self.dump_config()
-			if self.cfg['audio_format'] == 'MIDI' or self.cfg['audio_format'].endswith('.sf2'):
-				fn_midi = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
-				fn_midi = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.wav'
-				MIDI = MIDIFile(1)  # One track
-				MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
-				for j in range(len(self.nd['note'])):
-					# addNote(track, channel, pitch, time + i, duration, volume)
-					MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
-				with open(fn_midi, 'wb') as mid:
-					MIDI.writeFile(mid)
-				os.system('fluidsynth -ni {} {} -F {} -r 44100'.format(self.sound_font,fn_midi,fn_wav))
-			elif self.cfg['audio_format'] == 'Piano':
-				self.synth()
-			elif self.cfg['audio_format'] == 'Stream':
-				self.neuralstream()
-			if not self.display:
-				return
-	
-	def synth(self):
-		'''
+		if not self.check_data():
+			return
+		self.process_H_W()
+		if self.cfg['audio_format'] == 'MIDI' or self.cfg['audio_format'].endswith('.sf2'):
+			fn_midi = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mid'
+			fn_wav = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.wav'
+			MIDI = MIDIFile(1)  # One track
+			MIDI.addTempo(0,0,60) # addTempo(track, time, tempo)
+			for j in range(len(self.nd['note'])):
+				# addNote(track, channel, pitch, time + i, duration, volume)
+				MIDI.addNote(0, 0, self.nd['note'][j], self.nd['st'][j], (self.nd['en'][j]-self.nd['st'][j]), self.nd['mag'][j])
+			with open(fn_midi, 'wb') as mid:
+				MIDI.writeFile(mid)
+		if self.cfg['audio_format'].endswith('.sf2'):
+			fn_font = os.path.join(os.path.dirname(os.path.abspath(__file__)),'anthem_soundfonts',self.cfg['audio_format'])
+			os.system('fluidsynth -ni -F {} -r 44100 {} {}'.format(fn_wav,fn_font,fn_midi))
+		elif self.cfg['audio_format'] == 'Piano':
+			self.synth()
+		elif self.cfg['audio_format'] == 'Analog':
+			self.neuralstream()
+		self.message(f'Audio file written to {self.cfg["save_path"]}')
 		
-		'''
-		fs = 44100
-		r = .5 # release for note
-		#r_mat = np.linspace(1, 0, num=int(fs*r))
-		#r_mat = np.vstack((r_mat,r_mat)).T
-		currnote = -1
-		ext = 11
-		note = [[0] * 8 for i in range(3)]
-		raws = np.zeros((int(fs*(np.max(self.nd['st'])+ext)),2))
-		nnotes = len(self.nd['st'])
-		for i in range(len(self.nd['st'])):
-			if currnote != self.nd['note'][i]:
-				currnote = self.nd['note'][i]
-				for mag in range(8): # Load up new notes
-					for length in range(3):
-						fn = str(currnote+1)+'_'+str(mag)+'_'+str(length+1)+'.ogg';
-						note[length][mag],notused = read(os.path.join(self.package_path,'AE',fn))
-			L = self.nd['en'][i]-self.nd['st'][i]
-			L = min(L,10-r)
-			if L > 1:
-				raw = note[2][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
-			elif 1 > L > .25:
-				raw = note[1][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
-			elif L < .25:
-				raw = note[0][int(np.ceil(self.nd['mag'][i]/16-1))]#[0:int(L*fs)] # Truncate to note length plus release
-			#raw[-int(fs*r):] *= r_mat
-			inds = range(int(self.nd['st'][i][0]*fs),int(self.nd['st'][i][0]*fs)+len(raw))
-			raws[inds,:] += raw
-			if self.display:
-				self.status['text'] = f'Status: writing audio file, {i+1} out of {nnotes} notes written'
-				self.update()
-		raws = raws[:-fs*(ext-1),:] # Crop wav
-		raws = np.int16(raws/np.max(np.abs(raws)) * 32767)
-		wavwrite(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.wav',fs,raws)
-		if self.display:
-			self.status['text'] = f'Status: audio file written to {self.cfg["save_path"]}'
-
-	def neuralstream(self):
-		'''
-		
-		'''
-		C0 = 16.352
-		fs = 44100
-		freqs = [C0*2**(i/12) for i in range(128)]
-		true_fr = (self.cfg['fr']*self.cfg['speed'])/100
-		ns = int(fs*len(self.data['H_fp'].T)/true_fr)
-		t1 = np.linspace(0,len(self.data['H_fp'].T)/self.cfg['fr'],len(self.data['H_fp'].T))
-		t2 = np.linspace(0,len(self.data['H_fp'].T)/self.cfg['fr'],ns)
-		H = np.zeros((len(t2),))
-		nchan = len(self.data['H_fp'])
-		for n in range(nchan):
-			Htmp = self.data['H_fp'][n,:]
-			Htmp[Htmp<0] = 0
-			Htmp = interp1d(t1,Htmp)(t2)
-			H += np.sin(2*np.pi*freqs[self.keys[n]]*t2)*Htmp
-			Hstr = 'H_fp'
-			if self.display:
-				self.status['text'] = f'Status: Writing audio: {n+1} out of {nchan} channels...'
-				self.update()
-		wav = np.hstack((H[:,None],H[:,None]))
-		wav = np.int16(wav/np.max(np.abs(wav)) * 32767)
-		wavwrite(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.wav',fs,wav)
-		if self.display:
-			self.status['text'] = f'Status: audio file written to {self.cfg["save_path"]}'
-		else:
-			print(f'Audio file written to {self.cfg["save_path"]}')
-
 	def write_video(self):
 		'''
 		Writes video file using self.data['H_pp'] using opencv
+		http://zulko.github.io/blog/2013/09/27/read-and-write-video-frames-in-python-using-ffmpeg/
 		'''
-		if self.check_data_and_save_path():		
-			if not self.display:
-				self.process_H_W()
-			if self.display:
-				self.dump_config()
-			fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-			out = cv2.VideoWriter(os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4', fourcc, self.cfg['fr']*self.cfg['speed']/100, tuple(self.data['W_shape'][::-1][1:]),True)
-			nframes = len(self.data['H_pp'].T)
-			for i in range(nframes):
-				frame = (self.data['W_pp']@np.diag(self.data['H_pp'][:,i])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8')
-				out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-				if self.display:
-					self.status['text'] = f'Status: writing video file, {i+1} out of {nframes} frames written'
-					self.update()
-			out.release()
-			if self.display:
-				self.status['text'] = f'Status: video file written to {self.cfg["save_path"]}'
-			else:
-				print(f'Video file written to {self.cfg["save_path"]}')
-				return self
+		if not self.check_data():
+			return
+		self.process_H_W()
+		fn_vid = os.path.join(self.cfg['save_path'],self.cfg['file_out'])+'.mp4'
+		v_shape = self.data['W_shape'][::-1][1:] # Reverse because ffmpeg does hxw
+		command = [ 'ffmpeg',
+			'-loglevel', 'warning',
+			'-hide_banner',
+			'-y',
+			'-f', 'image2pipe',
+			'-vcodec','png',
+			'-s', '{}x{}'.format(v_shape[0],v_shape[1]),
+			'-r', str(self.cfg['fr']*self.cfg['speed']/100),
+			'-i', '-', # The input comes from a pipe
+			'-an', # Tells FFMPEG not to expect any audio
+			'-q:v','2',
+			'-vcodec', 'mpeg4',
+			fn_vid]
+		pipe = sp.Popen( command, stdin=sp.PIPE)
+		nframes = len(self.data['H_pp'].T)
+		for i in range(nframes):
+			frame = (self.data['W_pp']@np.diag(self.data['H_pp'][:,i])@self.cmap[:,:-1]*(255/self.cfg['brightness'])).reshape(self.data['W_shape'][0],self.data['W_shape'][1],3).clip(min=0,max=255).astype('uint8')
+			im = Image.fromarray(frame)
+			im.save(pipe.stdin, 'PNG')
+			if self.display and i%10==0:
+				self.status['text'] = f'Writing video file, {i} out of {nframes} frames written'
+				self.update()
+		pipe.stdin.close()
+		pipe.wait()
+		self.message(f'Video file written to {self.cfg["save_path"]}')
+		return self
 	
 	def merge(self):
 		'''
 		Merges video and audio with ffmpeg
 		'''
-		if self.check_data_and_save_path():
+		if self.check_data():
 			fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
 			cmd = 'ffmpeg -hide_banner -loglevel warning -y -i {} -i {} -c:v copy -c:a aac {}'.format(fn+'.mp4',fn+'.wav',fn+'_AV.mp4')
 			os.system(cmd)
-			if self.display:
-				self.status['text'] = f'Status: Video file w/ audio written to {self.cfg["save_path"]}'
-			else:
-				print(f'A/V file written to {self.cfg["save_path"]}')
-				return self
+			self.message(f'A/V file written to {self.cfg["save_path"]}')
+			return self
 	
 	def write_AV(self):
 		'''
 		
 		'''
-		if self.check_data_and_save_path():
+		if self.check_data():
 			self.write_video()
 			self.write_audio()
 			self.merge()
@@ -590,15 +536,14 @@ class GUI(Tk):
 		Tries to remove any files that are video or audio only.	
 		'''
 		fn = os.path.join(self.cfg['save_path'],self.cfg['file_out'])
-		try:
-			os.remove(fn+'.mp4')
-			os.remove(fn+'.wav')
-		except: pass
-		if self.display:
-			self.status['text'] = f'A/V only videos removed'
-		else:
-			print(f'A/V only videos removed')
-			return self
+		try: os.remove(fn+'.mp4')
+		except OSError: pass
+		try: os.remove(fn+'.wav')
+		except OSError: pass
+		try: os.remove(fn+'.mid')
+		except OSError: pass
+		self.message(f'A/V only videos removed')
+		return self
 
 	def edit_save_path(self):
 		self.save_path.set(fd.askdirectory(title='Select a directory to save output files',initialdir=self.cfg['save_path']))
@@ -607,7 +552,7 @@ class GUI(Tk):
 		'''
 		
 		'''
-		self.winfo_toplevel().title("pyanthem GUI")
+		self.winfo_toplevel().title('pyanthem v{}'.format(pkg_resources.require("pyanthem")[0].version))
 		self.protocol("WM_DELETE_WINDOW", self.quit)
 
 		# StringVars
@@ -616,95 +561,94 @@ class GUI(Tk):
 		self.save_path=init_entry('')
 		self.speed=init_entry(100)
 		self.fr=init_entry(0)
-		self.st_p=init_entry(0)
-		self.en_p=init_entry(100)
+		self.start_percent=init_entry(0)
+		self.end_percent=init_entry(100)
 		self.baseline=init_entry(0)
 		self.brightness=init_entry(0)
 		self.threshold=init_entry(0)
-		self.oct_add=init_entry('2')
-		self.scale_type=init_entry('Maj. 7th (4/oct)')
+		self.octave_add=init_entry('2')
+		self.scale_type=init_entry('Maj. 7 (4/oct)')
 		self.key=init_entry('C')
-		self.audio_format=init_entry('Stream')
+		self.audio_format=init_entry('Analog')
 		self.Wshow=init_entry('all')
-		self.status=init_entry('Status: Welcome to pyanthem!')
 		self.cmapchoice=init_entry('jet')
 		
 		# Labels
-		Label(text='').grid(row=0,column=0) # Just to give a border around Seperators
-		Label(text='File Parameters',font='Helvetica 14 bold').grid(row=0,column=1,columnspan=2,sticky='WE')
-		Label(text='Movie Parameters',font='Helvetica 14 bold').grid(row=0,column=3,columnspan=2,sticky='WE')
-		Label(text='Audio Parameters',font='Helvetica 14 bold').grid(row=0,column=5,columnspan=2,sticky='WE')
-		Label(text='Input Filename').grid(row=1, column=1,columnspan=2,sticky='W')
-		Label(text='Output Filename').grid(row=3, column=1,columnspan=2,sticky='W')
-		Label(text='Save Path').grid(row=5, column=1,columnspan=1,sticky='W')
-		Label(text='Playback speed (%)').grid(row=1, column=3, sticky='E')
-		Label(text='Start (%)').grid(row=2, column=3, sticky='E')
-		Label(text='End (%)').grid(row=3, column=3, sticky='E')
-		Label(text='Baseline').grid(row=4, column=3, sticky='E')
-		Label(text='Max brightness').grid(row=5, column=3, sticky='E')
-		Label(text='Colormap').grid(row=6, column=3, sticky='E')
-		Label(text='Threshold').grid(row=1, column=5, sticky='E')
-		Label(text='Octave').grid(row=2, column=5, sticky='E')
-		Label(text='Scale Type').grid(row=3, column=5, sticky='E')
-		Label(text='Key').grid(row=4, column=5, sticky='E')
-		Label(text='Audio format').grid(row=5, column=5, sticky='E')
+		Label(text='',font='Helvetica 1 bold').grid(row=0,column=0) # Just to give a border around Seperators
+		Label(text='File Parameters',font='Helvetica 14 bold').grid(row=1,column=1,columnspan=2,sticky='WE')
+		Label(text='Movie Parameters',font='Helvetica 14 bold').grid(row=1,column=3,columnspan=2,sticky='WE')
+		Label(text='Audio Parameters',font='Helvetica 14 bold').grid(row=1,column=5,columnspan=2,sticky='WE')
+		Label(text='Input Filename').grid(row=2, column=1,columnspan=2,sticky='W')
+		Label(text='Output Filename').grid(row=4, column=1,columnspan=2,sticky='W')
+		Label(text='Save Path').grid(row=6, column=1,columnspan=1,sticky='W')
+		Label(text='Speed (%)').grid(row=2, column=3, sticky='E')
+		Label(text='Start (%)').grid(row=3, column=3, sticky='E')
+		Label(text='End (%)').grid(row=4, column=3, sticky='E')
+		Label(text='Baseline').grid(row=5, column=3, sticky='E')
+		Label(text='Max brightness').grid(row=6, column=3, sticky='E')
+		Label(text='Colormap').grid(row=7, column=3, sticky='E')
+		Label(text='Threshold').grid(row=2, column=5, sticky='E')
+		Label(text='Octave').grid(row=3, column=5, sticky='E')
+		Label(text='Scale Type').grid(row=4, column=5, sticky='E')
+		Label(text='Key').grid(row=5, column=5, sticky='E')
+		Label(text='Audio format').grid(row=6, column=5, sticky='E')
 
 		# Messages
-		self.status = Message(text='Status: Welcome to pyanthem!',aspect=1000)
-		self.status.grid(row=8, column=1,columnspan=4,sticky='W')
-		self.status.grid_propagate(0)
+		self.status = Message(text='> Welcome to pyanthem v{}'.format(pkg_resources.require("pyanthem")[0].version),bg='white',fg='black',width=450)
+		self.status.grid(row=9, column=2, columnspan=5, sticky='NESW')
+		self.status['anchor']='nw'
 
 		# Entries
-		Entry(textvariable=self.file_in).grid(row=2, column=1,columnspan=2,sticky='W')
-		Entry(textvariable=self.file_out).grid(row=4, column=1,columnspan=2,sticky='W')
-		Entry(textvariable=self.save_path,width=17).grid(row=6, column=1,columnspan=2,sticky='EW')
-		Entry(textvariable=self.speed,width=7).grid(row=1, column=4, sticky='W')
-		Entry(textvariable=self.st_p,width=7).grid(row=2, column=4, sticky='W')
-		Entry(textvariable=self.en_p,width=7).grid(row=3, column=4, sticky='W')
-		Entry(textvariable=self.baseline,width=7).grid(row=4, column=4, sticky='W')
-		Entry(textvariable=self.brightness,width=7).grid(row=5, column=4, sticky='W')
-		Entry(textvariable=self.threshold,width=7).grid(row=1, column=6, sticky='W')
+		Entry(textvariable=self.file_in).grid(row=3, column=1,columnspan=2,sticky='W')
+		Entry(textvariable=self.file_out).grid(row=5, column=1,columnspan=2,sticky='W')
+		Entry(textvariable=self.save_path,width=17).grid(row=7, column=1,columnspan=2,sticky='EW')
+		Entry(textvariable=self.speed,width=7).grid(row=2, column=4, sticky='W')
+		Entry(textvariable=self.start_percent,width=7).grid(row=3, column=4, sticky='W')
+		Entry(textvariable=self.end_percent,width=7).grid(row=4, column=4, sticky='W')
+		Entry(textvariable=self.baseline,width=7).grid(row=5, column=4, sticky='W')
+		Entry(textvariable=self.brightness,width=7).grid(row=6, column=4, sticky='W')
+		Entry(textvariable=self.threshold,width=7).grid(row=2, column=6, sticky='W')
 
 		# Buttons
-		Button(text='Edit',command=self.edit_save_path,width=5).grid(row=5, column=2)
-		Button(text='Preview Notes',width=15,command=self.preview_notes).grid(row=6, column=5,columnspan=2)
-		Button(text='Update',width=15,command=self.refresh_GUI).grid(row=8, column=5,columnspan=2)
+		Button(text='Edit',command=self.edit_save_path,width=5).grid(row=6, column=2)
+		Button(text='Preview Notes',width=11,command=self.preview_notes).grid(row=7, column=5,columnspan=2)
+		Button(text='Update',width=7,font='Helvetica 14 bold',command=self.process_H_W).grid(row=9, column=1,columnspan=1)
 
 		# Option/combobox values
-		audio_format_opts = ['Stream']
-		sf_path = os.path.join(os.path.dirname(__file__),'anthem_soundfonts')
+		audio_format_opts = ['Analog']
+		sf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'anthem_soundfonts')
 		if os.path.isdir(sf_path):
 			fonts_avail = text_files = [f for f in os.listdir(sf_path) if f.endswith('.sf2')]
 			audio_format_opts.extend(fonts_avail)
 		
 		# Option Menus
-		oct_add_menu = OptionMenu(self,self.oct_add,*oct_add_opts)
-		oct_add_menu.config(width=7)
-		oct_add_menu.grid(row=2, column=6, sticky='W')
-		scale_type_menu=OptionMenu(self,self.scale_type,*scale_type_opts)
-		scale_type_menu.config(width=7)
-		scale_type_menu.config(font=(self.default_font,(8)))
-		scale_type_menu.grid(row=3, column=6, sticky='EW')
-		key_menu=OptionMenu(self,self.key,*key_opts)
+		octave_add_menu = OptionMenu(self,self.octave_add,*octave_add_opts.keys())
+		octave_add_menu.config(width=7)
+		octave_add_menu.grid(row=3, column=6, sticky='W')
+		scale_type_menu=OptionMenu(self,self.scale_type,*scale_keys.keys())
+		scale_type_menu.config(width=11,font=(self.default_font,(8)))
+		scale_type_menu.grid(row=4, column=6, sticky='W')
+		key_menu=OptionMenu(self,self.key,*key_opts.keys())
 		key_menu.config(width=7)
-		key_menu.grid(row=4, column=6, sticky='W')
+		key_menu.grid(row=5, column=6, sticky='W')
 		audio_format_menu=OptionMenu(self,self.audio_format,*audio_format_opts)
 		audio_format_menu.config(width=7)
-		audio_format_menu.grid(row=5, column=6, sticky='W')
+		audio_format_menu.grid(row=6, column=6, sticky='W')
 		
 		# Combo box
-		self.cmapchooser = Combobox(self,textvariable=self.cmapchoice,width=7)
+		self.cmapchooser = Combobox(self,textvariable=self.cmapchoice,width=5)
 		self.cmapchooser['values'] = cmaps_opts
 		#self.cmapchooser['state'] = 'readonly'
-		self.cmapchooser.grid(row=6, column=4, sticky='WE')
+		self.cmapchooser.grid(row=7, column=4, sticky='W')
 		self.cmapchooser.current()
 		self.cmap = []
+
 		# Menu bar
 		menubar=Menu(self)
 		filemenu=Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load from .mat", command=self.load_GUI)
 		filemenu.add_command(label="Load .cfg", command=self.load_config)
-		filemenu.add_command(label="Quit",command=self.quit)
+		filemenu.add_command(label="Quit",command=self.quit,accelerator="Ctrl+Q")
 
 		savemenu=Menu(menubar, tearoff=0)
 		savemenu.add_command(label="Audio", command=self.write_audio)
@@ -713,13 +657,22 @@ class GUI(Tk):
 		savemenu.add_command(label="Write A/V then merge", command=self.write_AV)
 		savemenu.add_command(label="Cleanup", command=self.cleanup)
 
+		cfgmenu=Menu(menubar, tearoff=0)
+		cfgmenu.add_command(label="Save", command=self.dump_cfg)
+		cfgmenu.add_command(label="View", command=self.view_cfg)
+
+		debugmenu=Menu(menubar, tearoff=0)
+		debugmenu.add_command(label="Query", command=self.query)
+
 		menubar.add_cascade(label="File", menu=filemenu)
 		menubar.add_cascade(label="Save", menu=savemenu)
+		menubar.add_cascade(label="Config", menu=cfgmenu)
+		menubar.add_cascade(label="Debug", menu=debugmenu)
 		self.config(menu=menubar)
 
 		# Seperators
-		s_v=[[0,0,9],[2,0,8],[4,0,8],[6,0,9]]
-		s_h=[[1,0,6],[1,1,6],[1,8,6],[1,9,6],[1,3,2],[1,5,2]]
+		s_v=[[0,1,9],[2,1,8],[4,1,8],[6,1,9]]
+		s_h=[[1,1,6],[1,2,6],[1,9,6],[1,10,6],[1,4,2],[1,6,2]]
 		for sv in s_v:
 			Separator(self, orient='vertical').grid(column=sv[0], row=sv[1], rowspan=sv[2], sticky='nse')
 		for sh in s_h:
@@ -733,6 +686,10 @@ class GUI(Tk):
 		self.frameslider=Scale(self, from_=0, to=1, orient=HORIZONTAL)
 		self.frameslider['command']=self.refresh_slider
 
+		# Bind shortcuts
+		self.bind_all("<Control-q>", self.quit)
+		self.bind_all("<Control-a>", lambda:[self.process_H_W(),self.refresh_GUI()])
+
 	def init_plots(self):
 		'''
 		
@@ -741,54 +698,52 @@ class GUI(Tk):
 		self.figH = plt.Figure(figsize=(6,6), dpi=100, tight_layout=True)
 		self.Hax1 = self.figH.add_subplot(211)
 		self.Hax2 = self.figH.add_subplot(212)
-		self.Hax1.set_title('Raw Temporal Data (H)')
-		self.Hax2.set_title('Converted Temporal Data (H\')')
+		self.Hax1.set_title('Temporal Data (H)')
+		self.Hax2.set_title('Audio Preview (H\')')
 		self.canvas_H = FigureCanvasTkAgg(self.figH, master=self)
-		self.canvas_H.get_tk_widget().grid(row=0,column=7,rowspan=29,columnspan=10)
-		bg = self.status.winfo_rgb(self.status['bg'])
+		self.canvas_H.get_tk_widget().grid(row=1,column=7,rowspan=29,columnspan=10)
+		bg = self.status.winfo_rgb(self['bg'])
 		self.figH.set_facecolor([(x>>8)/255 for x in bg])
-		self.canvas_H.draw()
+		#self.canvas_H.draw()
 
 		# Checkbox
-		Checkbutton(self, text="Offset H",command=self.refresh_GUI,variable=self.offsetH).grid(row=0,rowspan=1,column=16)
+		Checkbutton(self, text="Offset H",command=self.refresh_GUI,variable=self.offsetH).grid(row=1,rowspan=1,column=16)
 
 		# W
 		self.figW = plt.Figure(figsize=(6,3), dpi=100, constrained_layout=True)
 		self.Wax1 = self.figW.add_subplot(121)
 		self.Wax2 = self.figW.add_subplot(122)
-		self.Wax1.set_title('Output(H x W)')
-		self.Wax2.set_title('Spatial Components (W)')
+		self.Wax1.set_title('Video Preview')
+		self.Wax2.set_title('Spatial Data (W)')
 		self.Wax1.axis('off')
 		self.Wax2.axis('off')
 		self.canvas_W = FigureCanvasTkAgg(self.figW, master=self)
-		self.canvas_W.get_tk_widget().grid(row=10,column=1,rowspan=19,columnspan=6)
+		self.canvas_W.get_tk_widget().grid(row=11,column=1,rowspan=19,columnspan=6)
 		self.figW.set_facecolor([(x>>8)/255 for x in bg])
-		self.canvas_W.draw()
+		#self.canvas_W.draw()
 		
 		# Frameslider
-		self.frameslider.grid(row=29, column=2, columnspan=1)
-
+		self.frameslider.grid(row=30, column=1, columnspan=3,sticky='EW')
+		
 		# Wshow
-		Label(text='Components to show:').grid(row=29, column=3, columnspan=3, sticky='E')
-		Entry(textvariable=self.Wshow,width=15,justify='center').grid(row=29, column=5, columnspan=2,sticky='E')
+		Label(text='Components to show:').grid(row=30, column=3, columnspan=3, sticky='E')
+		Entry(textvariable=self.Wshow,width=15,justify='center').grid(row=30, column=5, columnspan=2,sticky='E')
 
 	def process_raw(self,file_in=None,n_clusters=None,frame_rate=None,save=False):
 		'''
-		
+		Decomposes raw dataset. Can be used in two ways: as a part of the 
+		GUI class for immediate processing (e.g. process_raw().write_AV()),
+		or as a method to save a new dataset. 
 		'''
-		from sklearn.cluster import KMeans
-		if file_in is None:
-			root = Tk()
-			root.withdraw()
-			file_in = os.path.normpath(fd.askopenfilename(title='Select .mat file for import',filetypes=[('.mat files','*.mat')]))
-			root.update()
-		if len(file_in) == 0:
+		if filein is None:
+			filein=uiopen(title='Select .mat file for import',filetypes=[('.mat files','*.mat')])
+		if filein == '.':
 			return
-		dh,var = loadmat(file_in),whosmat(file_in)
+		dh, var = loadmat(file_in),whosmat(file_in)
 		data = dh[var[0][0]]
 		sh = data.shape
 		if len(sh) != 3:
-			print('ERROR: input dataset is not 3D.')
+			self.message('ERROR: input dataset is not 3D.')
 			return
 		data = data.reshape(sh[0]*sh[1],sh[2])
 		# Ignore rows with any nans
@@ -820,9 +775,8 @@ class GUI(Tk):
 			Wtmp = W[:,i].reshape(sh[0],sh[1])
 			xc.append((X*Wtmp).sum() / Wtmp.sum().astype("float"))
 			yc.append((Y*Wtmp).sum() / Wtmp.sum().astype("float"))
-		I = np.argsort(-yc)
-		W = W[:,I]
-		H = H[I,:]
+		I = np.argsort(yc).reverse() # Reverse orders from bottom to top
+		W, H = W[:,I],H[I,:]
 		print('done.')
 		
 		# Assign variables and save
@@ -838,11 +792,35 @@ class GUI(Tk):
 		if save:
 			fn = file_in.replace('.mat','_decomp.mat')
 			savemat(fn,self.data)
-			print(f'Decomposed data file saved to {fn}')
+			self.message(f'Decomposed data file saved to {fn}')
 		
 		# Reshape W here, since any use of self from here would require a flattened W
 		self.data['W'] = self.data['W'].reshape(self.data['W'].shape[0]*self.data['W'].shape[1],self.data['W'].shape[2])
 		return self
+
+	def query(self):
+		field = simpledialog.askstring("Input", "Query a root property",parent=self)
+		try:
+			self.status['text'] = str(getattr(self,field))
+		except:
+			self.status['text'] = 'Bad query.'
+
+	def view_cfg(self):
+		'''
+		Only works once!
+		'''
+		self.cfginfo = Toplevel()
+		text = ''
+		try:
+			for key in self.cfg:
+				text+=str(key)+': '+str(self.cfg[key])+'\n'
+		except:
+			pass
+		self.cfginfotext = Message(self.cfginfo,text=text)
+		self.cfginfotext.pack()
+
+	def help(self):
+		print('To load a dataset:\npyanthem.load_data()\n\nTo load a cfg file:\npyanthem.load_config()\n\nTo write video:\npyanthem.write_video()\n\nTo write audio:\npyanthem.write_audio()')
 
 if __name__ == "__main__":
 	run()

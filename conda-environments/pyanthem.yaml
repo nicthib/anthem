@@ -6,17 +6,14 @@
 # remove: conda remove --name pyanthem --all
 
 name: pyanthem
-
 channels:
   - defaults
   - conda-forge
-    
 dependencies:
   - python=3.7
   - pip
-  - jupyter
-  - ipykernel # Need to test if this is neccesary
   - git
-  - fluidsynth
+  - ffmpeg
   - pip:
     - pyanthem
+  - fluidsynth
